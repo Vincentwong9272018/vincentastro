@@ -1,0 +1,8 @@
+streamlit
+geopy
+timezonefinder
+pytz
+matplotlib
+Pillow
+numpy
+kerykeion==2.1.15
