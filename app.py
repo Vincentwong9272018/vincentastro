@@ -214,6 +214,34 @@ def get_aspect_modifier_engine(p1, p2, target_angle, current_diff, jd, lat, lon,
         return "+" if abs(f_diff - target_angle) < abs(current_diff - target_angle) else "-"
     return ""
 
+def calc_zodiacal_releasing(lot_lon, birth_jd, target_jd):
+    start_sign = int(lot_lon // 30) % 12
+    total_days = target_jd - birth_jd
+    if total_days < 0: return None, None, False
+    l1_sign = start_sign
+    rem_days = total_days
+    while True:
+        period_days = ZR_PERIODS[l1_sign] * 360
+        if rem_days >= period_days:
+            rem_days -= period_days
+            l1_sign = (l1_sign + 1) % 12
+        else: break
+    l2_sign = l1_sign
+    months = 0
+    is_lb = False
+    while True:
+        sub_period_days = ZR_PERIODS[l2_sign] * 30
+        if rem_days >= sub_period_days:
+            rem_days -= sub_period_days
+            months += 1
+            if months == 12: 
+                l2_sign = (l2_sign + 6) % 12
+                is_lb = True
+            else:
+                l2_sign = (l2_sign + 1) % 12
+        else: break
+    return l1_sign, l2_sign, is_lb
+
 def find_astrology_patterns(positions):
     patterns = {"大三角": [], "大十字": [], "T三角": [], "風箏": [], "上帝之指": []}
     pts = [p for p in ALL_POINTS if p in positions]
@@ -463,7 +491,7 @@ def process_eval(title, sr_name, sr_lon, n_name, n_lon, cusps_n, h_code):
         "本命對比": f"{n_name} [{format_degree(n_lon)} {get_house_number(n_lon, cusps_n, h_code)}宮]",
         "準確相位": f"{e_nm} ({sign_e}{e_sc}分)",
         "星座相位": f"{s_nm} ({sign_s}{s_sc}分)",
-        "單項總計": f"{sign_t}{sub_total}分 ({status})"
+        "得分": f"{sign_t}{sub_total}分 ({status})"
     }
     return sub_total, table_row
 
@@ -483,6 +511,7 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
             
         pos_sr, _, asc_sr, cusps_sr, mc_sr, speed_sr = calculate_chart_engine(j2, lat_p, lon_p, h_code)
         
+        # --- ① 日返比較盤評分 (Synastry) ---
         total_sc = 0
         lines = []
         
@@ -514,10 +543,51 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
         elif -1 <= total_sc <= 1: rating = "平"
         elif -4 <= total_sc <= -2: rating = "凶"
         else: rating = "大凶"
+
+        # --- ② 日返盤本體評分 (Internal SR) ---
+        sr_internal_score = 0
+        sr_internal_lines = []
         
-        return j2, pos_sr, asc_sr, cusps_sr, speed_sr, total_sc, rating, lines
+        angles = [asc_sr, mc_sr, (asc_sr + 180) % 360, (mc_sr + 180) % 360]
+        angle_names = ["ASC", "MC", "DSC", "IC"]
+        
+        # 壓角評分
+        for p, pts in [('木星', 5), ('金星', 4), ('火星', -4), ('土星', -4), ('天王星', -3), ('海王星', -3), ('冥王星', -3)]:
+            lon = pos_sr[p]
+            for ang_val, ang_name in zip(angles, angle_names):
+                diff = abs(lon - ang_val)
+                diff = min(diff, 360 - diff)
+                if diff <= 3.0:
+                    sr_internal_score += pts
+                    sr_internal_lines.append({"評估項目": "星體壓角", "星體/狀態": f"{p} 合相 {ang_name}", "細節": f"容許度 {diff:.1f}°", "得分": f"{'+' if pts>0 else ''}{pts}分"})
+                    break 
+
+        # 宮位評分
+        for p in ['太陽', '月亮', '木星', '金星']:
+            h_num = get_house_number(pos_sr[p], cusps_sr, h_code)
+            if h_num in [1, 5, 10, 11]:
+                sr_internal_score += 2
+                sr_internal_lines.append({"評估項目": "吉星入吉宮", "星體/狀態": f"{p} 入 {h_num} 宮", "細節": "正面加分", "得分": "+2分"})
+
+        for p in ['火星', '土星']:
+            h_num = get_house_number(pos_sr[p], cusps_sr, h_code)
+            if h_num in [6, 8, 12]:
+                sr_internal_score += -2
+                sr_internal_lines.append({"評估項目": "凶星入凶宮", "星體/狀態": f"{p} 入 {h_num} 宮", "細節": "負面減分", "得分": "-2分"})
+
+        if not sr_internal_lines:
+            sr_internal_lines.append({"評估項目": "無觸發", "星體/狀態": "-", "細節": "無星體壓角或落關鍵宮位", "得分": "0分"})
+
+        if sr_internal_score > 4: sr_internal_rating = "大吉"
+        elif 2 <= sr_internal_score <= 4: sr_internal_rating = "吉"
+        elif -1 <= sr_internal_score <= 1: sr_internal_rating = "平"
+        elif -4 <= sr_internal_score <= -2: sr_internal_rating = "凶"
+        else: sr_internal_rating = "大凶"
+        
+        return j2, pos_sr, asc_sr, cusps_sr, speed_sr, total_sc, rating, lines, sr_internal_score, sr_internal_rating, sr_internal_lines
+    
     except Exception:
-        return None, None, None, None, None, 0, "計算失敗", []
+        return None, None, None, None, None, 0, "計算失敗", [], 0, "計算失敗", []
 
 # ================= 4. 擇時過濾引擎 =================
 def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
@@ -687,7 +757,7 @@ chk_profection = st.sidebar.checkbox("顯示小限歲數")
 chk_zr = st.sidebar.checkbox("黃道釋放")             
 chk_solar_return = st.sidebar.checkbox("計算日返星盤")
 chk_sr_batch = st.sidebar.checkbox("日返大批 (1-75歲吉凶)") 
-chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") # 💡 新增日返重置選項
+chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") 
 chk_transit = st.sidebar.checkbox("計算過運行運")
 
 aspect_specs_full = [(0, "合相", '#95a5a6', custom_orbs.get(0, 0)), (30, "十二分", '#f39c12', custom_orbs.get(30, 0)), (45, "半四分", '#d35400', custom_orbs.get(45, 0)), (60, "六分", '#2ecc71', custom_orbs.get(60, 0)), (90, "四分", '#e74c3c', custom_orbs.get(90, 0)), (120, "三分", '#27ae60', custom_orbs.get(120, 0)), (135, "補八分", '#c0392b', custom_orbs.get(135, 0)), (150, "補十二", '#8e44ad', custom_orbs.get(150, 0)), (180, "對相", '#2980b9', custom_orbs.get(180, 0))]
@@ -894,14 +964,20 @@ if st.session_state.calc_triggered:
             sr_rating = ""
             sr_total_score = 0
             sr_eval_table = []
+            sr_int_rating = ""
+            sr_int_score = 0
+            sr_int_table = []
             
             if chk_solar_return:
-                j2_val, pos_sr, asc_sr, cusps_sr, speed_sr, sc_val, rtg_val, table_lines = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
+                j2_val, pos_sr, asc_sr, cusps_sr, speed_sr, sc_val, rtg_val, table_lines, int_sc, int_rtg, int_lines = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
                 if j2_val:
                     img_sr = draw_astrology_chart(pos_sr, asc_sr, cusps_sr, aspect_specs_full, a_sys_name, speeds=speed_sr)
                     sr_rating = rtg_val
                     sr_total_score = sc_val
                     sr_eval_table = table_lines
+                    sr_int_rating = int_rtg
+                    sr_int_score = int_sc
+                    sr_int_table = int_lines
                     
                     days_offset = j2_val - 2451545.0
                     sr_local_dt = (datetime.datetime(2000, 1, 1, 12, 0, tzinfo=pytz.utc) + datetime.timedelta(days=days_offset)).astimezone(pytz.timezone(TimezoneFinder().timezone_at(lng=lon_p, lat=lat_p) or "UTC"))
@@ -914,26 +990,30 @@ if st.session_state.calc_triggered:
             batch_data = []
             if chk_sr_batch:
                 for age_step in range(1, 76):
-                    j2_val, _, _, _, _, sc_val, rtg_val, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
+                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
                     if j2_val:
                         batch_data.append({
                             "推運歲數": age_step, 
                             "對應年份": dt_n_utc.year + age_step, 
-                            "流年總評分": f"{'+' if sc_val > 0 else ''}{sc_val}", 
-                            "吉凶標籤": rtg_val
+                            "比較盤總分": f"{'+' if sc_val > 0 else ''}{sc_val}", 
+                            "比較盤吉凶": rtg_val,
+                            "日返盤總分": f"{'+' if int_sc > 0 else ''}{int_sc}", 
+                            "日返盤吉凶": int_rtg
                         })
 
             # 💡 日返重置 (各國流年吉凶)
             reloc_data = []
             if chk_sr_reloc:
                 for country, coords in RELOCATION_COUNTRIES.items():
-                    j2_val, _, _, _, _, sc_val, rtg_val, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
+                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
                     if j2_val:
                         reloc_data.append({
                             "國家": country,
-                            "流年總評分": f"{'+' if sc_val > 0 else ''}{sc_val}",
-                            "吉凶標籤": rtg_val,
-                            "raw_score": sc_val
+                            "比較盤總分": f"{'+' if sc_val > 0 else ''}{sc_val}",
+                            "比較盤吉凶": rtg_val,
+                            "日返盤總分": f"{'+' if int_sc > 0 else ''}{int_sc}",
+                            "日返盤吉凶": int_rtg,
+                            "raw_score": sc_val + int_sc
                         })
                 reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
                 for d in reloc_data:
@@ -955,9 +1035,13 @@ if st.session_state.calc_triggered:
                 with tab2:
                     if img_sr: 
                         st.image(img_sr, use_container_width=True)
-                        st.markdown(f"### 📊 流年吉凶 5 大核心交點分析 ({st.session_state.target_age}歲) - 【{sr_rating}】")
+                        st.markdown(f"### 📊 比較盤 (5大核心交點分析) - 【{sr_rating}】")
                         st.caption(f"加總總分: {'+' if sr_total_score>0 else ''}{sr_total_score}")
                         st.table(sr_eval_table)
+                        
+                        st.markdown(f"### 📍 日返盤本體分析 - 【{sr_int_rating}】")
+                        st.caption(f"加總總分: {'+' if sr_int_score>0 else ''}{sr_int_score}")
+                        st.table(sr_int_table)
                     else: 
                         st.info("請於左側勾選「計算日返星盤」以生成。")
                         
