@@ -863,36 +863,40 @@ if st.session_state.calc_triggered:
                         elif sign_diff in [3, 9]: sign_score, sign_name = -1, "四分"
                         return exact_score, exact_name, sign_score, sign_name
                         
-                    total_sr_score = 0
                     def process_eval(title, sr_name, sr_lon, n_name, n_lon):
-                        nonlocal total_sr_score
                         e_sc, e_nm, s_sc, s_nm = get_aspect_and_sign_score(sr_lon, n_lon)
                         sub_total = e_sc + s_sc
-                        total_sr_score += sub_total
                         status = "吉" if sub_total > 0 else ("凶" if sub_total < 0 else "平")
                         sign_e = "+" if e_sc > 0 else ""
                         sign_s = "+" if s_sc > 0 else ""
                         sign_t = "+" if sub_total > 0 else ""
-                        return f"{title}\n- 日返 {sr_name} [{format_degree(sr_lon)}] vs 本命 {n_name} [{format_degree(n_lon)} 本命 {get_house_number(n_lon, cusps_n, h_code)}宮]\n- 準確相位：{e_nm}({sign_e}{e_sc}分) | 星座相位：{s_nm}({sign_s}{s_sc}分)\n- 單項吉凶：{status} (小計: {sign_t}{sub_total}分)\n"
+                        return sub_total, f"{title}\n- 日返 {sr_name} [{format_degree(sr_lon)}] vs 本命 {n_name} [{format_degree(n_lon)} 本命 {get_house_number(n_lon, cusps_n, h_code)}宮]\n- 準確相位：{e_nm}({sign_e}{e_sc}分) | 星座相位：{s_nm}({sign_s}{s_sc}分)\n- 單項吉凶：{status} (小計: {sign_t}{sub_total}分)\n"
 
+                    total_sr_score = 0
                     sr_eval_lines = []
-                    sr_eval_lines.append(process_eval("1. ASC 狀態", "ASC", asc_sr, "ASC", asc_n))
+                    
+                    sc, line = process_eval("1. ASC 狀態", "ASC", asc_sr, "ASC", asc_n)
+                    total_sr_score += sc; sr_eval_lines.append(line)
                     
                     pof_n = ((asc_n + pos_n['月亮'] - pos_n['太陽']) if (7 <= get_house_number(pos_n['太陽'], cusps_n, h_code) <= 12) else (asc_n + pos_n['太陽'] - pos_n['月亮'])) % 360
                     pof_sr = ((asc_sr + pos_sr['月亮'] - pos_sr['太陽']) if (7 <= get_house_number(pos_sr['太陽'], cusps_sr, h_code) <= 12) else (asc_sr + pos_sr['太陽'] - pos_sr['月亮'])) % 360
-                    sr_eval_lines.append(process_eval("2. 福點狀態", "福點", pof_sr, "福點", pof_n))
+                    sc, line = process_eval("2. 福點狀態", "福點", pof_sr, "福點", pof_n)
+                    total_sr_score += sc; sr_eval_lines.append(line)
                     
                     pof_ruler_n = TRADITIONAL_RULERS[ZODIAC_NAMES[int(pof_n // 30) % 12]]
                     pof_ruler_sr = TRADITIONAL_RULERS[ZODIAC_NAMES[int(pof_sr // 30) % 12]]
-                    sr_eval_lines.append(process_eval("3. 福點主星狀態", f"主星({pof_ruler_sr})", pos_sr[pof_ruler_sr], f"主星({pof_ruler_n})", pos_n[pof_ruler_n]))
+                    sc, line = process_eval("3. 福點主星狀態", f"主星({pof_ruler_sr})", pos_sr[pof_ruler_sr], f"主星({pof_ruler_n})", pos_n[pof_ruler_n])
+                    total_sr_score += sc; sr_eval_lines.append(line)
                     
                     prof_sign = (int(asc_n // 30) % 12 + st.session_state.target_age) % 12
                     prof_ruler = TRADITIONAL_RULERS[ZODIAC_NAMES[prof_sign]]
-                    sr_eval_lines.append(process_eval(f"4. 小限主星狀態 ({st.session_state.target_age}歲)", f"主星({prof_ruler})", pos_sr[prof_ruler], f"主星({prof_ruler})", pos_n[prof_ruler]))
+                    sc, line = process_eval(f"4. 小限主星狀態 ({st.session_state.target_age}歲)", f"主星({prof_ruler})", pos_sr[prof_ruler], f"主星({prof_ruler})", pos_n[prof_ruler])
+                    total_sr_score += sc; sr_eval_lines.append(line)
                     
                     asc_ruler_n = TRADITIONAL_RULERS[ZODIAC_NAMES[int(asc_n // 30) % 12]]
                     asc_ruler_sr = TRADITIONAL_RULERS[ZODIAC_NAMES[int(asc_sr // 30) % 12]]
-                    sr_eval_lines.append(process_eval("5. ASC 主星狀態", f"命主星({asc_ruler_sr})", pos_sr[asc_ruler_sr], f"命主星({asc_ruler_n})", pos_n[asc_ruler_n]))
+                    sc, line = process_eval("5. ASC 主星狀態", f"命主星({asc_ruler_sr})", pos_sr[asc_ruler_sr], f"命主星({asc_ruler_n})", pos_n[asc_ruler_n])
+                    total_sr_score += sc; sr_eval_lines.append(line)
                     
                     if total_sr_score > 4: final_rating = "【大吉】"
                     elif 2 <= total_sr_score <= 4: final_rating = "【吉】"
