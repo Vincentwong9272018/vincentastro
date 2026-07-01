@@ -78,7 +78,7 @@ def set_current_loc():
     st.session_state.calc_triggered = False
 
 def update_year_from_age():
-    st.session_state.p_year = max(1, st.session_state.n_year + st.session_state.target_age)
+    st.session_state.p_year = max(100, st.session_state.n_year + st.session_state.target_age)
 
 def update_age_from_year():
     st.session_state.target_age = max(0, st.session_state.p_year - st.session_state.n_year)
@@ -107,7 +107,7 @@ PLANET_SYMBOLS = {
 ALL_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '北交點', '上升', '中天']
 WEIGHT_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '上升', '中天']
 TRANSIT_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '北交點']
-LOCAL_SPACE_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '北交點']
+LOCAL_SPACE_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '北交點', '上升', '中天']
 
 TRADITIONAL_RULERS = {
     '牡羊': '火星', '金牛': '金星', '雙子': '水星', '巨蟹': '月亮',
@@ -179,8 +179,8 @@ def calculate_chart_engine(jd, lat, lon, house_system):
     cusps, ascmc = swe.houses(jd, lat, lon, house_system)
     positions['上升'] = ascmc[0]
     positions['中天'] = ascmc[1]
-    positions_lat['上升'] = 0.0
-    positions_lat['中天'] = 0.0
+    positions_lat['上升'] = 0.0 # 確保 ASC 具備維度計算能力
+    positions_lat['中天'] = 0.0 # 確保 MC 具備維度計算能力
     return positions, positions_lat, ascmc[0], cusps, ascmc[1], speeds
 
 def get_aspect_modifier_engine(p1, p2, target_angle, current_diff, jd, lat, lon, house_sys):
@@ -349,7 +349,7 @@ def draw_astrology_chart(positions, asc_degree, cusps, specs, aspect_system, spe
     buf.seek(0); plt.close()
     return buf
 
-# 💡 [防護修正] 加入「智能日期修復機制」，徹底根絕 ValueError: day is out of range 等崩潰問題
+# 💡 [防護修正] 智能修復越界日期，徹底根絕 ValueError: date value out of range
 def resolve_location_and_time(loc_name, y, m, d, h, minute):
     if not loc_name or not loc_name.strip(): 
         loc_name = "Manchester"
@@ -359,21 +359,22 @@ def resolve_location_and_time(loc_name, y, m, d, h, minute):
     lat, lon = location.latitude, location.longitude
     tz_str = TimezoneFinder().timezone_at(lng=lon, lat=lat) or "UTC"
     
-    # 智能修復越界日期 (Auto-clamping)
-    y = max(1, min(9999, y))
-    m = max(1, min(12, m))
+    # 強制收斂範圍，避免任何時區加減造成溢位 (保護 100 到 9000 年)
+    y = max(100, min(9000, int(y)))
+    m = max(1, min(12, int(m)))
+    d = max(1, int(d))
     if m in [4, 6, 9, 11]: 
-        d = min(30, max(1, d))
+        d = min(30, d)
     elif m == 2:
         is_leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
-        d = min(29 if is_leap else 28, max(1, d))
+        d = min(29 if is_leap else 28, d)
     else: 
-        d = min(31, max(1, d))
+        d = min(31, d)
         
     try:
-        local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, d, h, minute))
+        local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, d, int(h), int(minute)))
     except Exception as e:
-        raise ValueError(f"輸入的日期無效：{str(e)}")
+        raise ValueError(f"處理的日期無效：{str(e)}")
         
     utc_dt = local_dt.astimezone(pytz.utc)
     hour_decimal = utc_dt.hour + (utc_dt.minute / 60.0)
@@ -381,25 +382,21 @@ def resolve_location_and_time(loc_name, y, m, d, h, minute):
     info = f"城市: {location.address}\n時區: {tz_str}\n時間: {local_dt.strftime('%Y-%m-%d %H:%M')}\n"
     return jd, lat, lon, info, utc_dt
 
-# 💡 [新增] 地平占星羅盤繪製引擎
 def draw_local_space_compass(ls_data):
     fig, ax = plt.subplots(figsize=(7, 7), subplot_kw={'projection': 'polar'})
-    ax.set_theta_zero_location("N") # 方位角0度為正北方
-    ax.set_theta_direction(-1)      # 順時針繪製
+    ax.set_theta_zero_location("N") 
+    ax.set_theta_direction(-1)      
     ax.axis('off')
     
-    # 外圈與內圈
     ax.add_artist(plt.Circle((0, 0), 1.0, transform=ax.transData._b, fill=False, color='#333', lw=1.2))
     ax.add_artist(plt.Circle((0, 0), 0.8, transform=ax.transData._b, fill=False, color='#ccc', lw=0.8))
     
-    # 地理方位標籤與十字線
     dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
     for i, d in enumerate(dirs):
         angle = np.deg2rad(i * 45)
         ax.plot([angle, angle], [0.8, 1.0], color='#888', lw=0.8)
         ax.text(angle, 1.08, d, fontsize=13, ha='center', va='center', fontweight='bold', color='#333')
         
-    # 標籤防重疊演算法
     occupied_slots = []
     for row in sorted(ls_data, key=lambda x: x['az']):
         orig_angle = row['az']
@@ -425,7 +422,6 @@ def draw_local_space_compass(ls_data):
         color = row['color']
         sym = row['sym']
         
-        # 繪製指向線與星體符號
         ax.plot([theta_draw, theta_actual], [r_level, 0.8], color=color, lw=0.9, alpha=0.6, linestyle='-')
         ax.plot([theta_actual, theta_actual], [0, 0.8], color=color, lw=0.6, alpha=0.3, linestyle=':')
         
@@ -529,8 +525,7 @@ name = st.sidebar.text_input("姓名", key="name_input")
 gender = st.sidebar.selectbox("性別", ["男", "女"])
 
 col1, col2, col3 = st.sidebar.columns(3)
-# 為 Streamlit widget 加上極限防護
-col1.number_input("年", key="n_year", min_value=1, max_value=9999, step=1)
+col1.number_input("年", key="n_year", min_value=100, max_value=9000, step=1)
 col2.number_input("月", key="n_month", min_value=1, max_value=12)
 col3.number_input("日", key="n_day", min_value=1, max_value=31)
 
@@ -540,14 +535,13 @@ col5.number_input("分", key="n_minute", min_value=0, max_value=59)
 st.sidebar.text_input("出生城市", key="n_loc")
 
 btn_col1, btn_col2 = st.sidebar.columns(2)
-# 使用 Streamlit 新版推薦之 width="stretch"
 btn_col1.button("🕒 當下時間", on_click=set_current_time, width="stretch")
 btn_col2.button("📍 當下地點", on_click=set_current_loc, width="stretch")
 
 st.sidebar.divider()
 
 with st.sidebar.expander("推運 / 行運 / 日返設定", expanded=False):
-    st.number_input("推運 年", key="p_year", min_value=1, max_value=9999, step=1, on_change=update_age_from_year)
+    st.number_input("推運 年", key="p_year", min_value=100, max_value=9000, step=1, on_change=update_age_from_year)
     col6, col7 = st.columns(2)
     col6.number_input("推運 月", key="p_month", min_value=1, max_value=12)
     col7.number_input("推運 日", key="p_day", min_value=1, max_value=31)
@@ -562,7 +556,6 @@ with st.sidebar.expander("⏳ 專業擇時動態篩選 (Electional)", expanded=F
     chk_election = st.checkbox("開啟擇時篩選功能", value=False)
     st.text_input("擇時目標城市", key="el_loc_input", placeholder="預設: Manchester")
     
-    # 限制日曆選取器範圍防呆
     start_date = st.date_input("開始日期", datetime.date.today(), min_value=datetime.date(1900, 1, 1), max_value=datetime.date(2100, 12, 31))
     end_date = st.date_input("結束日期", datetime.date.today() + datetime.timedelta(days=7), min_value=datetime.date(1900, 1, 1), max_value=datetime.date(2100, 12, 31))
     
@@ -645,7 +638,6 @@ if st.session_state.calc_triggered:
             local_space_data = []
             for p in LOCAL_SPACE_POINTS:
                 if p in pos_n and p in pos_lat_n:
-                    # 地平轉換 (計算方位角及高度角)
                     xin = (pos_n[p], pos_lat_n[p], 0.0)
                     geopos = (lon_n, lat_n, 0.0)
                     az_alt = swe.azalt(jd_n, swe.ECL2HOR, geopos, 1013.25, 15.0, xin)
@@ -653,13 +645,12 @@ if st.session_state.calc_triggered:
                     azimuth_raw = az_alt[0]
                     true_alt = az_alt[1]
                     
-                    # Swiss Ephemeris 默認 0° 在南邊。轉換為常規地圖視角 (0° = N, 90° = E, 180° = S, 270° = W)
                     az_n = (azimuth_raw + 180) % 360
                     dirs = ["北 (N)", "東北 (NE)", "東 (E)", "東南 (SE)", "南 (S)", "西南 (SW)", "西 (W)", "西北 (NW)"]
                     idx = int((az_n + 22.5) // 45) % 8
                     
                     local_space_data.append({
-                        "planet": p, "sym": PLANET_SYMBOLS[p]['sym'], "color": PLANET_SYMBOLS[p]['color'],
+                        "planet": p, "sym": PLANET_SYMBOLS[p]['sym'] if p in PLANET_SYMBOLS else "", "color": PLANET_SYMBOLS[p]['color'] if p in PLANET_SYMBOLS else "#000",
                         "az": az_n, "alt": true_alt, "dir": dirs[idx], "status": "地平上" if true_alt >= 0 else "地平下"
                     })
             
@@ -849,6 +840,68 @@ if st.session_state.calc_triggered:
                     sr_local_dt = (datetime.datetime(2000, 1, 1, 12, 0, tzinfo=pytz.utc) + datetime.timedelta(days=days_offset)).astimezone(pytz.timezone(TimezoneFinder().timezone_at(lng=lon_p, lat=lat_p) or "UTC"))
                     report += f"\n\n【日返報告】\n返照精確時間：{sr_local_dt.strftime('%Y-%m-%d %H:%M:%S')}\n"
                     for k in ALL_POINTS: report += f"日返{k}：{format_degree(pos_sr[k])} {get_house_number(pos_sr[k], cusps_sr, h_code)}宮\n"
+                    
+                    # 💡 [新增] 吉凶 5 大核心交點分析系統
+                    def get_aspect_and_sign_score(lon_sr, lon_n):
+                        diff = abs(lon_sr - lon_n)
+                        diff = min(diff, 360 - diff)
+                        exact_score, exact_name = 0, "無"
+                        if diff <= 6.0: exact_score, exact_name = 1, "合相"
+                        elif abs(diff - 120) <= 6.0: exact_score, exact_name = 1, "三分相"
+                        elif abs(diff - 60) <= 6.0: exact_score, exact_name = 1, "六分相"
+                        elif abs(diff - 180) <= 6.0: exact_score, exact_name = -1, "對分相"
+                        elif abs(diff - 90) <= 6.0: exact_score, exact_name = -1, "四分相"
+                        
+                        sign_sr = int(lon_sr // 30) % 12
+                        sign_n = int(lon_n // 30) % 12
+                        sign_diff = (sign_sr - sign_n) % 12
+                        sign_score, sign_name = 0, "無"
+                        if sign_diff == 0: sign_score, sign_name = 1, "同星座"
+                        elif sign_diff in [4, 8]: sign_score, sign_name = 1, "三分"
+                        elif sign_diff in [2, 10]: sign_score, sign_name = 1, "六分"
+                        elif sign_diff == 6: sign_score, sign_name = -1, "對分"
+                        elif sign_diff in [3, 9]: sign_score, sign_name = -1, "四分"
+                        return exact_score, exact_name, sign_score, sign_name
+                        
+                    total_sr_score = 0
+                    def process_eval(title, sr_name, sr_lon, n_name, n_lon):
+                        nonlocal total_sr_score
+                        e_sc, e_nm, s_sc, s_nm = get_aspect_and_sign_score(sr_lon, n_lon)
+                        sub_total = e_sc + s_sc
+                        total_sr_score += sub_total
+                        status = "吉" if sub_total > 0 else ("凶" if sub_total < 0 else "平")
+                        sign_e = "+" if e_sc > 0 else ""
+                        sign_s = "+" if s_sc > 0 else ""
+                        sign_t = "+" if sub_total > 0 else ""
+                        return f"{title}\n- 日返 {sr_name} [{format_degree(sr_lon)}] vs 本命 {n_name} [{format_degree(n_lon)} 本命 {get_house_number(n_lon, cusps_n, h_code)}宮]\n- 準確相位：{e_nm}({sign_e}{e_sc}分) | 星座相位：{s_nm}({sign_s}{s_sc}分)\n- 單項吉凶：{status} (小計: {sign_t}{sub_total}分)\n"
+
+                    sr_eval_lines = []
+                    sr_eval_lines.append(process_eval("1. ASC 狀態", "ASC", asc_sr, "ASC", asc_n))
+                    
+                    pof_n = ((asc_n + pos_n['月亮'] - pos_n['太陽']) if (7 <= get_house_number(pos_n['太陽'], cusps_n, h_code) <= 12) else (asc_n + pos_n['太陽'] - pos_n['月亮'])) % 360
+                    pof_sr = ((asc_sr + pos_sr['月亮'] - pos_sr['太陽']) if (7 <= get_house_number(pos_sr['太陽'], cusps_sr, h_code) <= 12) else (asc_sr + pos_sr['太陽'] - pos_sr['月亮'])) % 360
+                    sr_eval_lines.append(process_eval("2. 福點狀態", "福點", pof_sr, "福點", pof_n))
+                    
+                    pof_ruler_n = TRADITIONAL_RULERS[ZODIAC_NAMES[int(pof_n // 30) % 12]]
+                    pof_ruler_sr = TRADITIONAL_RULERS[ZODIAC_NAMES[int(pof_sr // 30) % 12]]
+                    sr_eval_lines.append(process_eval("3. 福點主星狀態", f"主星({pof_ruler_sr})", pos_sr[pof_ruler_sr], f"主星({pof_ruler_n})", pos_n[pof_ruler_n]))
+                    
+                    prof_sign = (int(asc_n // 30) % 12 + st.session_state.target_age) % 12
+                    prof_ruler = TRADITIONAL_RULERS[ZODIAC_NAMES[prof_sign]]
+                    sr_eval_lines.append(process_eval(f"4. 小限主星狀態 ({st.session_state.target_age}歲)", f"主星({prof_ruler})", pos_sr[prof_ruler], f"主星({prof_ruler})", pos_n[prof_ruler]))
+                    
+                    asc_ruler_n = TRADITIONAL_RULERS[ZODIAC_NAMES[int(asc_n // 30) % 12]]
+                    asc_ruler_sr = TRADITIONAL_RULERS[ZODIAC_NAMES[int(asc_sr // 30) % 12]]
+                    sr_eval_lines.append(process_eval("5. ASC 主星狀態", f"命主星({asc_ruler_sr})", pos_sr[asc_ruler_sr], f"命主星({asc_ruler_n})", pos_n[asc_ruler_n]))
+                    
+                    if total_sr_score > 4: final_rating = "【大吉】"
+                    elif 2 <= total_sr_score <= 4: final_rating = "【吉】"
+                    elif -1 <= total_sr_score <= 1: final_rating = "【平】"
+                    elif -4 <= total_sr_score <= -2: final_rating = "【凶】"
+                    else: final_rating = "【大凶】"
+                    
+                    report += f"\n== 流年吉凶 5 大核心交點分析 ==\n【整體吉凶總評】：{final_rating} (加總總分: {'+' if total_sr_score>0 else ''}{total_sr_score})\n\n" + "\n".join(sr_eval_lines)
+
                 except Exception as e:
                     report += f"\n\n【日返報告】\n無法計算此年份之日返星盤 ({str(e)})\n"
 
@@ -860,7 +913,6 @@ if st.session_state.calc_triggered:
 
             with col_main1:
                 st.subheader("圖表視覺化")
-                # 💡 [新增] Tab3: 地平占星
                 tab1, tab2, tab3 = st.tabs(["本命星盤", "日返星盤", "地平占星"])
                 with tab1: st.image(img_n, use_container_width=True)
                 with tab2:
@@ -869,13 +921,9 @@ if st.session_state.calc_triggered:
                 with tab3:
                     st.image(img_ls, use_container_width=True)
                     st.markdown("### 📍 地平占星方位數據")
-                    
-                    # 生成 Markdown 數據表
-                    md_table = "| 星體 | 方位角 (Azimuth) | 高度角 (Altitude) | 地理方位 |\n|---|---|---|---|\n"
                     for row in local_space_data:
                         sign_alt = "+" if row['alt'] >= 0 else ""
-                        md_table += f"| {row['sym']} {row['planet']} | {row['az']:.2f}° | {sign_alt}{row['alt']:.2f}° ({row['status']}) | {row['dir']} |\n"
-                    st.markdown(md_table)
+                        st.text(f"{row['sym']} {row['planet']}；{row['az']:.2f}°；{sign_alt}{row['alt']:.2f}° ({row['status']})；{row['dir']}")
             
             with col_main2:
                 st.subheader("綜合觀測報告")
