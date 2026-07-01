@@ -14,6 +14,30 @@ import itertools
 
 st.set_page_config(page_title="專業星盤系統", layout="wide")
 
+# ================= 0. 常數與地理資訊 =================
+RELOCATION_COUNTRIES = {
+    "日本": {"lat":35.6895, "lon":139.6917}, "臺灣": {"lat":25.0330, "lon":121.5654}, "泰國": {"lat":13.7563, "lon":100.5018}, "韓國": {"lat":37.5665, "lon":126.9780}, "中國": {"lat":39.9042, "lon":116.4074}, 
+    "英國": {"lat":51.5074, "lon":-0.1278}, "新加坡": {"lat:1.3521", "lon":103.8198}, "馬來西亞": {"lat":3.1390, "lon":101.6869}, "越南": {"lat":21.0285, "lon":105.8542}, "澳洲": {"lat":-33.8688, "lon":151.2093}, 
+    "美國": {"lat":40.7128, "lon":-74.0060}, "加拿大": {"lat":43.6510, "lon":-79.3470}, "法國": {"lat":48.8566, "lon":2.3522}, "德國": {"lat":52.5200, "lon":13.4050}, "意大利": {"lat":41.9028, "lon":12.4964}, 
+    "西班牙": {"lat":40.4168, "lon":-3.7038}, "葡萄牙": {"lat":38.7223, "lon":-9.1393}, "瑞士": {"lat":46.9480, "lon":7.4474}, "荷蘭": {"lat":52.3676, "lon":4.9041}, "比利時": {"lat":50.8503, "lon":4.3517}, 
+    "希臘": {"lat":37.9838, "lon":23.7275}, "土耳其": {"lat":41.0082, "lon":28.9784}, "愛爾蘭": {"lat":53.3498, "lon":-6.2603}, "奧地利": {"lat":48.2082, "lon":16.3738}, "紐西蘭": {"lat":-36.8485, "lon":174.7633}, 
+    "菲律賓": {"lat":14.5995, "lon":120.9842}, "印尼": {"lat":-6.2088, "lon":106.8456}, "柬埔寨": {"lat":11.5564, "lon":104.9282}, "馬爾代夫": {"lat":4.1755, "lon":73.5093}, "阿聯酋": {"lat":25.2048, "lon":55.2708}, 
+    "克羅地亞": {"lat":45.8150, "lon":15.9819}, "冰島": {"lat":64.1466, "lon":-21.9426}, "挪威": {"lat":59.9139, "lon":10.7522}, "瑞典": {"lat":59.3293, "lon":18.0686}, "芬蘭": {"lat":60.1695, "lon":24.9354}, 
+    "丹麥": {"lat":55.6761, "lon":12.5683}, "捷克": {"lat":50.0755, "lon":14.4378}, "匈牙利": {"lat":47.4979, "lon":19.0402}, "波蘭": {"lat":52.2297, "lon":21.0122}, "塞浦路斯": {"lat":35.1856, "lon":33.3823}, 
+    "馬耳他": {"lat":35.8989, "lon":14.5146}, "摩洛哥": {"lat":34.0209, "lon":-6.8416}, "埃及": {"lat":30.0444, "lon":31.2357}, "南非": {"lat":-33.9249, "lon":18.4241}, "肯尼亞": {"lat":-1.2921, "lon":36.8219}, 
+    "毛里裘斯": {"lat":-20.1609, "lon":57.5012}, "塞舌爾": {"lat":-4.6191, "lon":55.4513}, "墨西哥": {"lat":19.4326, "lon":-99.1332}, "巴西": {"lat":-23.5505, "lon":-46.6333}, "阿根廷": {"lat":-34.6037, "lon":-58.3816}, 
+    "秘魯": {"lat":-12.0464, "lon":-77.0428}, "智利": {"lat":-33.4489, "lon":-70.6693}, "哥倫比亞": {"lat":4.7110, "lon":-74.0721}, "古巴": {"lat":23.1136, "lon":-82.3666}, "牙買加": {"lat":18.0179, "lon":-76.8099}, 
+    "盧森堡": {"lat":49.6116, "lon":6.1319}, "摩納哥": {"lat":43.7384, "lon":7.4246}, "巴巴多斯": {"lat":13.1939, "lon":-59.5432}, "聖盧西亞": {"lat":14.0118, "lon":-60.9887}, "巴哈馬": {"lat":25.0443, "lon":-77.3504}, 
+    "安道爾": {"lat":42.5063, "lon":1.5218}, "愛沙尼亞": {"lat":59.4370, "lon":24.7536}, "拉脫維亞": {"lat":56.9496, "lon":24.1052}, "立陶宛": {"lat":54.6872, "lon":25.2797}, "斯洛伐克": {"lat":48.1486, "lon":17.1077}, 
+    "斯洛文尼亞": {"lat":46.0569, "lon":14.5058}, "羅馬尼亞": {"lat":44.4268, "lon":26.1025}, "保加利亞": {"lat":42.6977, "lon":23.3219}, "塞爾維亞": {"lat":44.7866, "lon":20.4489}, "黑山": {"lat":42.4304, "lon":19.2594}, 
+    "阿爾巴尼亞": {"lat":41.3275, "lon":19.8187}, "北馬其頓": {"lat":42.0006, "lon":21.4333}, "波斯尼亞": {"lat":43.8563, "lon":18.4131}, "格魯吉亞": {"lat":41.7151, "lon":44.8271}, "亞美尼亞": {"lat":40.1872, "lon":44.5152}, 
+    "阿塞拜疆": {"lat":40.4093, "lon":49.8671}, "卡塔爾": {"lat":25.2854, "lon":51.5310}, "沙特阿拉伯": {"lat":24.7136, "lon":46.6753}, "巴林": {"lat":26.2285, "lon":50.5860}, "阿曼": {"lat":23.5859, "lon":58.4059}, 
+    "約旦": {"lat":31.9454, "lon":35.9284}, "以色列": {"lat":31.7683, "lon":35.2137}, "黎巴嫩": {"lat":33.8938, "lon":35.5018}, "印度": {"lat":28.6139, "lon":77.2090}, "斯里蘭卡": {"lat":6.9271, "lon":79.8612}, 
+    "尼泊爾": {"lat":27.7172, "lon":85.3240}, "不丹": {"lat":27.4728, "lon":89.6393}, "馬達加斯加": {"lat":-18.8792, "lon":47.5079}, "突尼斯": {"lat":36.8065, "lon":10.1815}, "阿爾及利亞": {"lat":36.7538, "lon":3.0588}, 
+    "坦桑尼亞": {"lat":-6.1659, "lon":39.2026}, "納米比亞": {"lat":-22.5609, "lon":17.0658}, "博茨瓦納": {"lat":-24.6282, "lon":25.9231}, "津巴布韋": {"lat":-17.8216, "lon":31.0492}, "斐濟": {"lat":-18.1416, "lon":178.4419}, 
+    "老撾": {"lat":17.9757, "lon":102.6331}, "文萊": {"lat":4.9031, "lon":114.9398}, "哥斯達黎加": {"lat":9.9281, "lon":-84.0907}, "玻利維亞": {"lat":-16.4897, "lon":-68.1193}, "蒙古": {"lat":47.9200, "lon":106.9200}
+}
+
 # ================= 0. Session State 狀態管理 =================
 now = datetime.datetime.now()
 
@@ -189,34 +213,6 @@ def get_aspect_modifier_engine(p1, p2, target_angle, current_diff, jd, lat, lon,
         if f_diff > 180: f_diff = 360 - f_diff
         return "+" if abs(f_diff - target_angle) < abs(current_diff - target_angle) else "-"
     return ""
-
-def calc_zodiacal_releasing(lot_lon, birth_jd, target_jd):
-    start_sign = int(lot_lon // 30) % 12
-    total_days = target_jd - birth_jd
-    if total_days < 0: return None, None, False
-    l1_sign = start_sign
-    rem_days = total_days
-    while True:
-        period_days = ZR_PERIODS[l1_sign] * 360
-        if rem_days >= period_days:
-            rem_days -= period_days
-            l1_sign = (l1_sign + 1) % 12
-        else: break
-    l2_sign = l1_sign
-    months = 0
-    is_lb = False
-    while True:
-        sub_period_days = ZR_PERIODS[l2_sign] * 30
-        if rem_days >= sub_period_days:
-            rem_days -= sub_period_days
-            months += 1
-            if months == 12: 
-                l2_sign = (l2_sign + 6) % 12
-                is_lb = True
-            else:
-                l2_sign = (l2_sign + 1) % 12
-        else: break
-    return l1_sign, l2_sign, is_lb
 
 def find_astrology_patterns(positions):
     patterns = {"大三角": [], "大十字": [], "T三角": [], "風箏": [], "上帝之指": []}
@@ -524,22 +520,8 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
         return None, None, None, None, None, 0, "計算失敗", []
 
 # ================= 4. 擇時過濾引擎 =================
-def get_planet_or_ruler_lon(target_name, pos, cusps, h_code):
-    if "宮主" in target_name:
-        h_idx = int(target_name.replace("宮主", "")) - 1
-        c_list = list(cusps)[1:] if len(cusps) == 13 else list(cusps)
-        if h_code == b'W':
-            asc_sign = int(c_list[0] // 30) % 12
-            sign_idx = (asc_sign + h_idx) % 12
-        else:
-            sign_idx = int(c_list[h_idx] // 30) % 12
-        ruler_name = TRADITIONAL_RULERS[ZODIAC_NAMES[sign_idx]]
-        return pos[ruler_name], ruler_name
-    return pos[target_name], target_name
-
 def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
     pos, _, asc, cusps, mc, speed = calculate_chart_engine(jd, lat, lon, h_code)
-    c_list = list(cusps)[1:] if len(cusps) == 13 else list(cusps)
     
     asc_sign = int(asc // 30) % 12
     ruler_1_name = TRADITIONAL_RULERS[ZODIAC_NAMES[asc_sign]]
@@ -704,7 +686,8 @@ chk_sa_midpoint = st.sidebar.checkbox("日弧中點")
 chk_profection = st.sidebar.checkbox("顯示小限歲數")
 chk_zr = st.sidebar.checkbox("黃道釋放")             
 chk_solar_return = st.sidebar.checkbox("計算日返星盤")
-chk_sr_batch = st.sidebar.checkbox("日返大批 (1-75歲吉凶)") # 💡 新增日返大批選項
+chk_sr_batch = st.sidebar.checkbox("日返大批 (1-75歲吉凶)") 
+chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") # 💡 新增日返重置選項
 chk_transit = st.sidebar.checkbox("計算過運行運")
 
 aspect_specs_full = [(0, "合相", '#95a5a6', custom_orbs.get(0, 0)), (30, "十二分", '#f39c12', custom_orbs.get(30, 0)), (45, "半四分", '#d35400', custom_orbs.get(45, 0)), (60, "六分", '#2ecc71', custom_orbs.get(60, 0)), (90, "四分", '#e74c3c', custom_orbs.get(90, 0)), (120, "三分", '#27ae60', custom_orbs.get(120, 0)), (135, "補八分", '#c0392b', custom_orbs.get(135, 0)), (150, "補十二", '#8e44ad', custom_orbs.get(150, 0)), (180, "對相", '#2980b9', custom_orbs.get(180, 0))]
@@ -725,7 +708,6 @@ if st.session_state.calc_triggered:
             pos_n, pos_lat_n, asc_n, cusps_n, mc_n, speed_n = calculate_chart_engine(jd_n, lat_n, lon_n, h_code)
             img_n = draw_astrology_chart(pos_n, asc_n, cusps_n, aspect_specs_full, a_sys_name, speeds=speed_n)
             
-            # 地平占星運算數據
             local_space_data = []
             for p in LOCAL_SPACE_POINTS:
                 if p in pos_n and p in pos_lat_n:
@@ -908,7 +890,6 @@ if st.session_state.calc_triggered:
                                 t_lines.append(f"[運]{p1} {a_name} [命]{p2} {'+' if abs(calculate_chart_engine(jd_p + 0.005, lat_p, lon_p, h_code)[0][p1] - pos_n[p2]) < diff else '-'}{abs(diff - angle):.1f}°")
                 report += "\n".join(t_lines) if t_lines else "無符合交叉行運相位"
 
-            # 💡 日返星盤計算
             img_sr = None
             sr_rating = ""
             sr_total_score = 0
@@ -929,7 +910,7 @@ if st.session_state.calc_triggered:
                 else:
                     report += "\n\n【日返報告】\n無法計算此年份之日返星盤\n"
 
-            # 💡 新增功能：日返大批 (1-75歲)
+            # 💡 日返大批
             batch_data = []
             if chk_sr_batch:
                 for age_step in range(1, 76):
@@ -942,6 +923,22 @@ if st.session_state.calc_triggered:
                             "吉凶標籤": rtg_val
                         })
 
+            # 💡 日返重置 (各國流年吉凶)
+            reloc_data = []
+            if chk_sr_reloc:
+                for country, coords in RELOCATION_COUNTRIES.items():
+                    j2_val, _, _, _, _, sc_val, rtg_val, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
+                    if j2_val:
+                        reloc_data.append({
+                            "國家": country,
+                            "流年總評分": f"{'+' if sc_val > 0 else ''}{sc_val}",
+                            "吉凶標籤": rtg_val,
+                            "raw_score": sc_val
+                        })
+                reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
+                for d in reloc_data:
+                    del d["raw_score"]
+
             # ================= UI 佈局顯示 =================
             has_el_results = chk_election and 'election_results' in st.session_state and len(st.session_state['election_results']) > 0
             
@@ -950,7 +947,7 @@ if st.session_state.calc_triggered:
 
             with col_main1:
                 st.subheader("圖表視覺化")
-                tab1, tab2, tab3, tab4 = st.tabs(["本命星盤", "日返星盤", "地平占星", "日返大批"])
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["本命星盤", "日返星盤", "地平占星", "日返大批", "日返重置"])
                 
                 with tab1: 
                     st.image(img_n, use_container_width=True)
@@ -979,6 +976,13 @@ if st.session_state.calc_triggered:
                         st.dataframe(batch_data, use_container_width=True)
                     else:
                         st.info("請於左側勾選「日返大批 (1-75歲吉凶)」以生成。")
+                        
+                with tab5:
+                    if chk_sr_reloc:
+                        st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 各國流年吉凶)")
+                        st.dataframe(reloc_data, use_container_width=True)
+                    else:
+                        st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
             
             with col_main2:
                 st.subheader("綜合觀測報告")
