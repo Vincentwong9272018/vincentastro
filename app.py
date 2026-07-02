@@ -35,8 +35,7 @@ RELOCATION_COUNTRIES = {
     "約旦": {"lat":31.9454, "lon":35.9284}, "以色列": {"lat":31.7683, "lon":35.2137}, "黎巴嫩": {"lat":33.8938, "lon":35.5018}, "印度": {"lat":28.6139, "lon":77.2090}, "斯里蘭卡": {"lat":6.9271, "lon":79.8612}, 
     "尼泊爾": {"lat":27.7172, "lon":85.3240}, "不丹": {"lat":27.4728, "lon":89.6393}, "馬達加斯加": {"lat":-18.8792, "lon":47.5079}, "突尼斯": {"lat":36.8065, "lon":10.1815}, "阿爾及利亞": {"lat":36.7538, "lon":3.0588}, 
     "坦桑尼亞": {"lat":-6.1659, "lon":39.2026}, "納米比亞": {"lat":-22.5609, "lon":17.0658}, "博茨瓦納": {"lat":-24.6282, "lon":25.9231}, "津巴布韋": {"lat":-17.8216, "lon":31.0492}, "斐濟": {"lat":-18.1416, "lon":178.4419}, 
-    "老撾": {"lat":17.9757, "lon":102.6331}, "文萊": {"lat":4.9031, "lon":114.9398}, "哥斯達黎加": {"lat":9.9281, "lon":-84.0907}, "玻利維亞": {"lat":-16.4897, "lon":-68.1193}, "蒙古": {"lat":47.9200, "lon":106.9200}, 
-    "香港": {"lat":22.3193, "lon":114.1694}
+    "老撾": {"lat":17.9757, "lon":102.6331}, "文萊": {"lat":4.9031, "lon":114.9398}, "哥斯達黎加": {"lat":9.9281, "lon":-84.0907}, "玻利維亞": {"lat":-16.4897, "lon":-68.1193}, "蒙古": {"lat":47.9200, "lon":106.9200}
 }
 
 # ================= 0. Session State 狀態管理 =================
@@ -214,34 +213,6 @@ def get_aspect_modifier_engine(p1, p2, target_angle, current_diff, jd, lat, lon,
         if f_diff > 180: f_diff = 360 - f_diff
         return "+" if abs(f_diff - target_angle) < abs(current_diff - target_angle) else "-"
     return ""
-
-def calc_zodiacal_releasing(lot_lon, birth_jd, target_jd):
-    start_sign = int(lot_lon // 30) % 12
-    total_days = target_jd - birth_jd
-    if total_days < 0: return None, None, False
-    l1_sign = start_sign
-    rem_days = total_days
-    while True:
-        period_days = ZR_PERIODS[l1_sign] * 360
-        if rem_days >= period_days:
-            rem_days -= period_days
-            l1_sign = (l1_sign + 1) % 12
-        else: break
-    l2_sign = l1_sign
-    months = 0
-    is_lb = False
-    while True:
-        sub_period_days = ZR_PERIODS[l2_sign] * 30
-        if rem_days >= sub_period_days:
-            rem_days -= sub_period_days
-            months += 1
-            if months == 12: 
-                l2_sign = (l2_sign + 6) % 12
-                is_lb = True
-            else:
-                l2_sign = (l2_sign + 1) % 12
-        else: break
-    return l1_sign, l2_sign, is_lb
 
 def find_astrology_patterns(positions):
     patterns = {"大三角": [], "大十字": [], "T三角": [], "風箏": [], "上帝之指": []}
@@ -455,7 +426,7 @@ def draw_local_space_compass(ls_data):
     buf.seek(0); plt.close()
     return buf
 
-# ================= 3. 核心 5大吉凶分析功能 =================
+# ================= 3. 日返 5大吉凶分析功能 =================
 def get_aspect_and_sign_score(lon_sr, lon_n):
     diff = abs(lon_sr - lon_n)
     diff = min(diff, 360 - diff)
@@ -512,7 +483,6 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
             
         pos_sr, _, asc_sr, cusps_sr, mc_sr, speed_sr = calculate_chart_engine(j2, lat_p, lon_p, h_code)
         
-        # --- ① 日返比較盤評分 (Synastry) ---
         total_sc = 0
         lines = []
         
@@ -545,14 +515,12 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
         elif -4 <= total_sc <= -2: rating = "凶"
         else: rating = "大凶"
 
-        # --- ② 日返盤本體評分 (Internal SR) ---
         sr_internal_score = 0
         sr_internal_lines = []
         
         angles = [asc_sr, mc_sr, (asc_sr + 180) % 360, (mc_sr + 180) % 360]
         angle_names = ["ASC", "MC", "DSC", "IC"]
         
-        # 壓角評分
         for p, pts in [('木星', 5), ('金星', 4), ('火星', -4), ('土星', -4), ('天王星', -3), ('海王星', -3), ('冥王星', -3)]:
             lon = pos_sr[p]
             for ang_val, ang_name in zip(angles, angle_names):
@@ -563,7 +531,6 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
                     sr_internal_lines.append({"評估項目": "星體壓角", "星體/狀態": f"{p} 合相 {ang_name}", "細節": f"容許度 {diff:.1f}°", "得分": f"{'+' if pts>0 else ''}{pts}分"})
                     break 
 
-        # 宮位評分
         for p in ['太陽', '月亮', '木星', '金星']:
             h_num = get_house_number(pos_sr[p], cusps_sr, h_code)
             if h_num in [1, 5, 10, 11]:
@@ -759,6 +726,7 @@ chk_zr = st.sidebar.checkbox("黃道釋放")
 chk_solar_return = st.sidebar.checkbox("計算日返星盤")
 chk_sr_batch = st.sidebar.checkbox("日返大批 (1-75歲吉凶)") 
 chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") 
+chk_sa_batch = st.sidebar.checkbox("日弧大批") # 💡 新增日弧大批
 chk_transit = st.sidebar.checkbox("計算過運行運")
 
 aspect_specs_full = [(0, "合相", '#95a5a6', custom_orbs.get(0, 0)), (30, "十二分", '#f39c12', custom_orbs.get(30, 0)), (45, "半四分", '#d35400', custom_orbs.get(45, 0)), (60, "六分", '#2ecc71', custom_orbs.get(60, 0)), (90, "四分", '#e74c3c', custom_orbs.get(90, 0)), (120, "三分", '#27ae60', custom_orbs.get(120, 0)), (135, "補八分", '#c0392b', custom_orbs.get(135, 0)), (150, "補十二", '#8e44ad', custom_orbs.get(150, 0)), (180, "對相", '#2980b9', custom_orbs.get(180, 0))]
@@ -987,7 +955,6 @@ if st.session_state.calc_triggered:
                 else:
                     report += "\n\n【日返報告】\n無法計算此年份之日返星盤\n"
 
-            # 💡 日返大批
             batch_data = []
             if chk_sr_batch:
                 for age_step in range(1, 76):
@@ -1002,7 +969,6 @@ if st.session_state.calc_triggered:
                             "日返盤吉凶": int_rtg
                         })
 
-            # 💡 日返重置 (各國流年吉凶)
             reloc_data = []
             if chk_sr_reloc:
                 for country, coords in RELOCATION_COUNTRIES.items():
@@ -1019,6 +985,100 @@ if st.session_state.calc_triggered:
                 reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
                 for d in reloc_data:
                     del d["raw_score"]
+            
+            # 💡 [新增] 日弧大批核心算法
+            sa_batch_table = []
+            if chk_sa_batch:
+                # 1. 計算 0-75 歲精確相位列入 Report
+                sa_aspects_list = []
+                sun_rate = ((swe.calc_ut(jd_n + 75, swe.SUN)[0][0] - pos_n['太陽']) % 360) / 75.0
+                if sun_rate <= 0: sun_rate = 0.9856 # 防呆備用
+                
+                asp_map = {0: "合相", 45: "半四分", 90: "四分", 135: "補八分", 180: "對相", 225: "補八分", 270: "四分", 315: "半四分"}
+                for p1 in ALL_POINTS:
+                    for p2 in ALL_POINTS:
+                        if p1 == p2: continue
+                        for asp_deg, asp_name in asp_map.items():
+                            req_arc = (pos_n[p2] - pos_n[p1] - asp_deg) % 360
+                            if req_arc < 0: req_arc += 360
+                            age_exact = req_arc / sun_rate
+                            if 0.1 <= age_exact <= 75.0:
+                                sa_aspects_list.append((age_exact, p1, p2, asp_name))
+                
+                sa_aspects_list.sort(key=lambda x: x[0])
+                sa_report_lines = [f"{p1}-{p2} {asp_n} （{age_e:.1f}歲）" for age_e, p1, p2, asp_n in sa_aspects_list]
+                report += "\n\n【日弧大批精確成相 (0-75歲)】\n" + "\n".join(sa_report_lines)
+                
+                # 2. 計算 1-75 歲的 Uranian 計分與判定
+                sa_base_scores = {
+                    '金星': 3.0, '木星': 3.0,
+                    '太陽': 1.5, '水星': 1.5,
+                    '土星': -3.0, '冥王星': -3.0,
+                    '火星': -1.5, '天王星': -1.5, '海王星': -1.5,
+                    '上升': 0.0, '中天': 0.0, '月亮': 0.0, '北交點': 0.0
+                }
+                
+                def get_orb_w(o):
+                    if o <= 0.25: return 1.0
+                    elif o <= 0.60: return 0.7
+                    elif o <= 1.00: return 0.4
+                    return 0.0
+                    
+                def dial_orb(val):
+                    rem = val % 45
+                    return min(rem, 45 - rem)
+                    
+                for age in range(1, 76):
+                    sa_arc = (swe.calc_ut(jd_n + age, swe.SUN)[0][0] - pos_n['太陽']) % 360
+                    total_sa_score = 0.0
+                    
+                    # Algorithm A: Two-Body
+                    for p1 in ALL_POINTS:
+                        sa_p1 = (pos_n[p1] + sa_arc) % 360
+                        for p2 in ALL_POINTS:
+                            orb = dial_orb(abs(sa_p1 - pos_n[p2]))
+                            if orb <= 1.0:
+                                total_sa_score += (sa_base_scores[p1] + sa_base_scores[p2]) * get_orb_w(orb)
+                                
+                    # Algorithm B: Three-Body (SA to Natal Midpoint)
+                    for p1 in ALL_POINTS:
+                        sa_p1 = (pos_n[p1] + sa_arc) % 360
+                        for n1, n2 in itertools.combinations(ALL_POINTS, 2):
+                            mp = calc_midpoint(pos_n[n1], pos_n[n2])
+                            orb = dial_orb(abs(sa_p1 - mp))
+                            if orb <= 1.0:
+                                total_sa_score += (sa_base_scores[p1] + sa_base_scores[n1] + sa_base_scores[n2]) * get_orb_w(orb)
+                                
+                    # Algorithm C: Uranian Modifiers
+                    mp_sun_mc_n = calc_midpoint(pos_n['太陽'], pos_n['中天'])
+                    mp_sun_mc_sa = (mp_sun_mc_n + sa_arc) % 360
+                    for b in ['金星', '木星']:
+                        if dial_orb(abs((pos_n[b] + sa_arc)%360 - mp_sun_mc_n)) <= 1.0: total_sa_score += 2.0
+                        if dial_orb(abs(mp_sun_mc_sa - pos_n[b])) <= 1.0: total_sa_score += 2.0
+                            
+                    mp_ma_ur_n = calc_midpoint(pos_n['火星'], pos_n['天王星'])
+                    mp_ma_ur_sa = (mp_ma_ur_n + sa_arc) % 360
+                    for m in ['土星', '冥王星', '火星', '天王星', '海王星']:
+                        if dial_orb(abs((pos_n[m] + sa_arc)%360 - mp_ma_ur_n)) <= 1.0: total_sa_score -= 3.0
+                        if dial_orb(abs(mp_ma_ur_sa - pos_n[m])) <= 1.0: total_sa_score -= 3.0
+                            
+                    mp_sa_ne_n = calc_midpoint(pos_n['土星'], pos_n['海王星'])
+                    mp_sa_ne_sa = (mp_sa_ne_n + sa_arc) % 360
+                    for p in ALL_POINTS:
+                        if dial_orb(abs((pos_n[p] + sa_arc)%360 - mp_sa_ne_n)) <= 1.0: total_sa_score -= 2.0
+                        if dial_orb(abs(mp_sa_ne_sa - pos_n[p])) <= 1.0: total_sa_score -= 2.0
+                            
+                    if total_sa_score > 10.0: sa_rating = "大吉"
+                    elif total_sa_score > 5.0: sa_rating = "吉"
+                    elif total_sa_score >= -5.0: sa_rating = "平"
+                    elif total_sa_score >= -10.0: sa_rating = "凶"
+                    else: sa_rating = "大凶"
+                    
+                    sa_batch_table.append({
+                        "推運歲數": age,
+                        "分數": f"{total_sa_score:+.1f}",
+                        "吉凶狀態": sa_rating
+                    })
 
             # ================= UI 佈局顯示 =================
             has_el_results = chk_election and 'election_results' in st.session_state and len(st.session_state['election_results']) > 0
@@ -1028,7 +1088,7 @@ if st.session_state.calc_triggered:
 
             with col_main1:
                 st.subheader("圖表視覺化")
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["本命星盤", "日返星盤", "地平占星", "日返大批", "日返重置"])
+                tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["本命星盤", "日返星盤", "地平占星", "日返大批", "日返重置", "日弧大批"])
                 
                 with tab1: 
                     st.image(img_n, use_container_width=True)
@@ -1068,6 +1128,13 @@ if st.session_state.calc_triggered:
                         st.dataframe(reloc_data, use_container_width=True)
                     else:
                         st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
+                        
+                with tab6:
+                    if chk_sa_batch:
+                        st.markdown("### 📈 日弧大批 (1-75歲 分數與吉凶預測)")
+                        st.dataframe(sa_batch_table, use_container_width=True)
+                    else:
+                        st.info("請於左側勾選「日弧大批」以生成。")
             
             with col_main2:
                 st.subheader("綜合觀測報告")
