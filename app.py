@@ -222,32 +222,25 @@ def find_astrology_patterns(positions):
         d = abs(positions[p1] - positions[p2])
         if d > 180: d = 360 - d
         return abs(d - target) <= orb
-
     for triple in itertools.combinations(pts, 3):
         signs = [int(positions[p] // 30) % 12 for p in triple]
         if len(set(signs)) < 3: continue
-        
         p1, p2, p3 = triple
         if is_asp(p1, p2, 120) and is_asp(p2, p3, 120) and is_asp(p1, p3, 120):
             el1, el2, el3 = ZODIAC_ELEMENTS[signs[0]], ZODIAC_ELEMENTS[signs[1]], ZODIAC_ELEMENTS[signs[2]]
-            if el1 == el2 == el3:
-                patterns["大三角"].append(f"{el1}元素大三角：{p1} - {p2} - {p3}")
-                
+            if el1 == el2 == el3: patterns["大三角"].append(f"{el1}元素大三角：{p1} - {p2} - {p3}")
         for a, b, c in itertools.permutations(triple):
             if is_asp(a, b, 180) and is_asp(c, a, 90) and is_asp(c, b, 90):
                 txt = f"{p1} - {p2} - {p3} (頂點: {c})"
                 if txt not in patterns["T三角"]: patterns["T三角"].append(txt)
-                
         for a, b, c in itertools.permutations(triple):
             if is_asp(a, b, 60) and is_asp(c, a, 150, orb=3.0) and is_asp(c, b, 150, orb=3.0):
                 txt = f"{a} - {b} - {c} (頂點: {c})"
                 if txt not in patterns["上帝之指"]: patterns["上帝之指"].append(txt)
-
     for quad in itertools.combinations(pts, 4):
         signs = [int(positions[p] // 30) % 12 for p in quad]
         if len(set(signs)) < 4: continue
         p1, p2, p3, p4 = quad
-        
         for a, b, c, d in itertools.permutations(quad):
             if is_asp(a, b, 180) and is_asp(c, d, 180):
                 if is_asp(a, c, 90) and is_asp(a, d, 90) and is_asp(b, c, 90) and is_asp(b, d, 90):
@@ -255,13 +248,11 @@ def find_astrology_patterns(positions):
                     if m1 == m2 == m3 == m4:
                         txt = f"{a} - {c} - {b} - {d}"
                         if txt not in patterns["大十字"]: patterns["大十字"].append(txt)
-                        
         for a, b, c, d in itertools.permutations(quad):
             if is_asp(a, b, 120) and is_asp(b, c, 120) and is_asp(a, c, 120):
                 if is_asp(d, a, 180) and is_asp(d, b, 60) and is_asp(d, c, 60):
                     txt = f"{a} - {b} - {c} - {d} (風箏頂點: {d})"
                     if txt not in patterns["風箏"]: patterns["風箏"].append(txt)
-                    
     return patterns
 
 def draw_astrology_chart(positions, asc_degree, cusps, specs, aspect_system, speeds=None):
@@ -726,7 +717,7 @@ chk_zr = st.sidebar.checkbox("黃道釋放")
 chk_solar_return = st.sidebar.checkbox("計算日返星盤")
 chk_sr_batch = st.sidebar.checkbox("日返大批 (1-75歲吉凶)") 
 chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") 
-chk_sa_batch = st.sidebar.checkbox("日弧大批") # 💡 新增日弧大批
+chk_sa_batch = st.sidebar.checkbox("日弧大批")
 chk_transit = st.sidebar.checkbox("計算過運行運")
 
 aspect_specs_full = [(0, "合相", '#95a5a6', custom_orbs.get(0, 0)), (30, "十二分", '#f39c12', custom_orbs.get(30, 0)), (45, "半四分", '#d35400', custom_orbs.get(45, 0)), (60, "六分", '#2ecc71', custom_orbs.get(60, 0)), (90, "四分", '#e74c3c', custom_orbs.get(90, 0)), (120, "三分", '#27ae60', custom_orbs.get(120, 0)), (135, "補八分", '#c0392b', custom_orbs.get(135, 0)), (150, "補十二", '#8e44ad', custom_orbs.get(150, 0)), (180, "對相", '#2980b9', custom_orbs.get(180, 0))]
@@ -986,7 +977,7 @@ if st.session_state.calc_triggered:
                 for d in reloc_data:
                     del d["raw_score"]
             
-            # 💡 [新增] 日弧大批核心算法
+            # 💡 [新增] 日弧大批核心算法 (已移除中點與特殊組合，只保留雙星成相)
             sa_batch_table = []
             if chk_sa_batch:
                 # 1. 計算 0-75 歲精確相位列入 Report
@@ -1009,7 +1000,7 @@ if st.session_state.calc_triggered:
                 sa_report_lines = [f"{p1}-{p2} {asp_n} （{age_e:.1f}歲）" for age_e, p1, p2, asp_n in sa_aspects_list]
                 report += "\n\n【日弧大批精確成相 (0-75歲)】\n" + "\n".join(sa_report_lines)
                 
-                # 2. 計算 1-75 歲的 Uranian 計分與判定
+                # 2. 計算 1-75 歲的純雙星計分與判定
                 sa_base_scores = {
                     '金星': 3.0, '木星': 3.0,
                     '太陽': 1.5, '水星': 1.5,
@@ -1032,42 +1023,14 @@ if st.session_state.calc_triggered:
                     sa_arc = (swe.calc_ut(jd_n + age, swe.SUN)[0][0] - pos_n['太陽']) % 360
                     total_sa_score = 0.0
                     
-                    # Algorithm A: Two-Body
+                    # 只有 Algorithm A: Two-Body Interactions
                     for p1 in ALL_POINTS:
                         sa_p1 = (pos_n[p1] + sa_arc) % 360
                         for p2 in ALL_POINTS:
                             orb = dial_orb(abs(sa_p1 - pos_n[p2]))
                             if orb <= 1.0:
                                 total_sa_score += (sa_base_scores[p1] + sa_base_scores[p2]) * get_orb_w(orb)
-                                
-                    # Algorithm B: Three-Body (SA to Natal Midpoint)
-                    for p1 in ALL_POINTS:
-                        sa_p1 = (pos_n[p1] + sa_arc) % 360
-                        for n1, n2 in itertools.combinations(ALL_POINTS, 2):
-                            mp = calc_midpoint(pos_n[n1], pos_n[n2])
-                            orb = dial_orb(abs(sa_p1 - mp))
-                            if orb <= 1.0:
-                                total_sa_score += (sa_base_scores[p1] + sa_base_scores[n1] + sa_base_scores[n2]) * get_orb_w(orb)
-                                
-                    # Algorithm C: Uranian Modifiers
-                    mp_sun_mc_n = calc_midpoint(pos_n['太陽'], pos_n['中天'])
-                    mp_sun_mc_sa = (mp_sun_mc_n + sa_arc) % 360
-                    for b in ['金星', '木星']:
-                        if dial_orb(abs((pos_n[b] + sa_arc)%360 - mp_sun_mc_n)) <= 1.0: total_sa_score += 2.0
-                        if dial_orb(abs(mp_sun_mc_sa - pos_n[b])) <= 1.0: total_sa_score += 2.0
-                            
-                    mp_ma_ur_n = calc_midpoint(pos_n['火星'], pos_n['天王星'])
-                    mp_ma_ur_sa = (mp_ma_ur_n + sa_arc) % 360
-                    for m in ['土星', '冥王星', '火星', '天王星', '海王星']:
-                        if dial_orb(abs((pos_n[m] + sa_arc)%360 - mp_ma_ur_n)) <= 1.0: total_sa_score -= 3.0
-                        if dial_orb(abs(mp_ma_ur_sa - pos_n[m])) <= 1.0: total_sa_score -= 3.0
-                            
-                    mp_sa_ne_n = calc_midpoint(pos_n['土星'], pos_n['海王星'])
-                    mp_sa_ne_sa = (mp_sa_ne_n + sa_arc) % 360
-                    for p in ALL_POINTS:
-                        if dial_orb(abs((pos_n[p] + sa_arc)%360 - mp_sa_ne_n)) <= 1.0: total_sa_score -= 2.0
-                        if dial_orb(abs(mp_sa_ne_sa - pos_n[p])) <= 1.0: total_sa_score -= 2.0
-                            
+                                                            
                     if total_sa_score > 10.0: sa_rating = "大吉"
                     elif total_sa_score > 5.0: sa_rating = "吉"
                     elif total_sa_score >= -5.0: sa_rating = "平"
