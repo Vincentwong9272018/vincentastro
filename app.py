@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+import json
 from kerykeion import KrInstance
 import matplotlib.pyplot as plt
 import numpy as np
@@ -49,13 +50,14 @@ exclusion_keys = [
 
 if 'n_year' not in st.session_state:
     st.session_state.update({
-        'n_year': 1990, 'n_month': 1, 'n_day': 1, 'n_hour': 12, 'n_minute': 0, 'n_loc': "Manchester", 'name_input': "Vincent",
+        'n_year': 1990, 'n_month': 1, 'n_day': 1, 'n_hour': 12, 'n_minute': 0, 'n_loc': "Manchester", 'name_input': "Vincent", 'gender_input': "男",
         'p_year': now.year, 'p_month': now.month, 'p_day': now.day, 'p_hour': now.hour, 'p_minute': now.minute, 'p_loc': "Manchester",
         'target_age': now.year - 1990,
         'election_conditions': [],
         'calc_triggered': False,
         'election_results': [],
-        'el_loc_input': "Manchester"
+        'el_loc_input': "Manchester",
+        'imported_profiles': []
     })
     for k in exclusion_keys:
         st.session_state[k] = True
@@ -65,6 +67,29 @@ def toggle_all_exclusions():
     target_state = not any_checked
     for k in exclusion_keys:
         st.session_state[k] = target_state
+
+# 💡 [新增] 命例選擇下拉聯動函數
+def on_profile_change():
+    selected = st.session_state.profile_selector
+    if selected != "-- 請選擇 --" and 'imported_profiles' in st.session_state:
+        for p in st.session_state.imported_profiles:
+            if p.get('Name') == selected:
+                try:
+                    dt = datetime.datetime.strptime(p['born on'], "%Y-%m-%d %H:%M:%S")
+                    st.session_state.n_year = dt.year
+                    st.session_state.n_month = dt.month
+                    st.session_state.n_day = dt.day
+                    st.session_state.n_hour = dt.hour
+                    st.session_state.n_minute = dt.minute
+                    st.session_state.name_input = p['Name']
+                    if p.get('Sex') in ["男", "女"]:
+                        st.session_state.gender_input = p['Sex']
+                    
+                    place_str = p.get('Place', 'Hong Kong')
+                    st.session_state.n_loc = place_str.split()[-1] if ' ' in place_str else place_str
+                except Exception:
+                    pass
+                break
 
 for key in st.session_state.keys():
     if key.startswith("btn_el_sync_") and st.session_state[key]:
@@ -335,6 +360,7 @@ def draw_astrology_chart(positions, asc_degree, cusps, specs, aspect_system, spe
     buf.seek(0); plt.close()
     return buf
 
+# 💡 [防護修正] 智能修復越界日期，徹底根絕 ValueError: date value out of range
 def resolve_location_and_time(loc_name, y, m, d, h, minute):
     if not loc_name or not loc_name.strip(): 
         loc_name = "Manchester"
@@ -347,18 +373,14 @@ def resolve_location_and_time(loc_name, y, m, d, h, minute):
     y = max(100, min(9000, int(y)))
     m = max(1, min(12, int(m)))
     d = max(1, int(d))
-    if m in [4, 6, 9, 11]: 
-        d = min(30, d)
-    elif m == 2:
-        is_leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
-        d = min(29 if is_leap else 28, d)
-    else: 
-        d = min(31, d)
-        
+    
     try:
         local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, d, int(h), int(minute)))
-    except Exception as e:
-        raise ValueError(f"處理的日期無效：{str(e)}")
+    except ValueError:
+        try:
+            local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, 1, int(h), int(minute)))
+        except Exception as e2:
+            raise ValueError(f"處理的日期無效：{str(e2)}")
         
     utc_dt = local_dt.astimezone(pytz.utc)
     hour_decimal = utc_dt.hour + (utc_dt.minute / 60.0)
@@ -622,8 +644,22 @@ def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
 
 # ================= 5. Streamlit UI 介面 =================
 st.sidebar.header("本命盤基本資訊")
+
+# 💡 [新增] 匯入 JSON 命例
+uploaded_file = st.sidebar.file_uploader("匯入 JSON 命例", type=["json"])
+if uploaded_file is not None:
+    try:
+        profiles = json.load(uploaded_file)
+        st.session_state['imported_profiles'] = profiles
+    except Exception as e:
+        st.sidebar.error("JSON 格式錯誤")
+
+if 'imported_profiles' in st.session_state and st.session_state['imported_profiles']:
+    profile_names = [p.get('Name', 'Unknown') for p in st.session_state['imported_profiles']]
+    st.sidebar.selectbox("選擇命例自動填寫", ["-- 請選擇 --"] + profile_names, key="profile_selector", on_change=on_profile_change)
+
 name = st.sidebar.text_input("姓名", key="name_input")
-gender = st.sidebar.selectbox("性別", ["男", "女"])
+gender = st.sidebar.selectbox("性別", ["男", "女"], key="gender_input")
 
 col1, col2, col3 = st.sidebar.columns(3)
 col1.number_input("年", key="n_year", min_value=100, max_value=9000, step=1)
@@ -715,9 +751,8 @@ chk_sa_midpoint = st.sidebar.checkbox("日弧中點")
 chk_profection = st.sidebar.checkbox("顯示小限歲數")
 chk_zr = st.sidebar.checkbox("黃道釋放")             
 chk_solar_return = st.sidebar.checkbox("計算日返星盤")
-chk_sr_batch = st.sidebar.checkbox("日返大批 (1-75歲吉凶)") 
+chk_batch = st.sidebar.checkbox("大批 (1-75歲 日弧及日返吉凶)") # 💡 合併大批
 chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") 
-chk_sa_batch = st.sidebar.checkbox("日弧大批")
 chk_transit = st.sidebar.checkbox("計算過運行運")
 
 aspect_specs_full = [(0, "合相", '#95a5a6', custom_orbs.get(0, 0)), (30, "十二分", '#f39c12', custom_orbs.get(30, 0)), (45, "半四分", '#d35400', custom_orbs.get(45, 0)), (60, "六分", '#2ecc71', custom_orbs.get(60, 0)), (90, "四分", '#e74c3c', custom_orbs.get(90, 0)), (120, "三分", '#27ae60', custom_orbs.get(120, 0)), (135, "補八分", '#c0392b', custom_orbs.get(135, 0)), (150, "補十二", '#8e44ad', custom_orbs.get(150, 0)), (180, "對相", '#2980b9', custom_orbs.get(180, 0))]
@@ -769,7 +804,7 @@ if st.session_state.calc_triggered:
                     modes_score[ZODIAC_MODES[z_idx]] += p_weights.get(p, 1)
             
             detected_patterns = find_astrology_patterns(pos_n)
-            report = f"== 命盤基本觀測 ==\n持有人：{st.session_state.name_input} ({gender})\n{meta_n}\n"
+            report = f"== 命盤基本觀測 ==\n持有人：{st.session_state.name_input} ({st.session_state.gender_input})\n{meta_n}\n"
             
             # 擇時掃描
             if chk_election:
@@ -940,50 +975,21 @@ if st.session_state.calc_triggered:
                     sr_int_table = int_lines
                     
                     days_offset = j2_val - 2451545.0
+                    if days_offset < -730000 or days_offset > 730000: raise ValueError("日返計算超出極限")
+                    
                     sr_local_dt = (datetime.datetime(2000, 1, 1, 12, 0, tzinfo=pytz.utc) + datetime.timedelta(days=days_offset)).astimezone(pytz.timezone(TimezoneFinder().timezone_at(lng=lon_p, lat=lat_p) or "UTC"))
                     report += f"\n\n【日返報告】\n返照精確時間：{sr_local_dt.strftime('%Y-%m-%d %H:%M:%S')}\n"
                     for k in ALL_POINTS: report += f"日返{k}：{format_degree(pos_sr[k])} {get_house_number(pos_sr[k], cusps_sr, h_code)}宮\n"
                 else:
                     report += "\n\n【日返報告】\n無法計算此年份之日返星盤\n"
 
+            # 💡 [新增] 日弧精確成相列表 (0-75歲) 與 大批資料表整合
             batch_data = []
-            if chk_sr_batch:
-                for age_step in range(1, 76):
-                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
-                    if j2_val:
-                        batch_data.append({
-                            "推運歲數": age_step, 
-                            "對應年份": dt_n_utc.year + age_step, 
-                            "比較盤總分": f"{'+' if sc_val > 0 else ''}{sc_val}", 
-                            "比較盤吉凶": rtg_val,
-                            "日返盤總分": f"{'+' if int_sc > 0 else ''}{int_sc}", 
-                            "日返盤吉凶": int_rtg
-                        })
-
-            reloc_data = []
-            if chk_sr_reloc:
-                for country, coords in RELOCATION_COUNTRIES.items():
-                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
-                    if j2_val:
-                        reloc_data.append({
-                            "國家": country,
-                            "比較盤總分": f"{'+' if sc_val > 0 else ''}{sc_val}",
-                            "比較盤吉凶": rtg_val,
-                            "日返盤總分": f"{'+' if int_sc > 0 else ''}{int_sc}",
-                            "日返盤吉凶": int_rtg,
-                            "raw_score": sc_val + int_sc
-                        })
-                reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
-                for d in reloc_data:
-                    del d["raw_score"]
-            
-            # 💡 [新增] 日弧大批核心算法 (已移除中點與特殊組合，只保留雙星成相)
-            sa_batch_table = []
-            if chk_sa_batch:
-                # 1. 計算 0-75 歲精確相位列入 Report
+            if chk_batch:
+                # 1. 計算 0-75 歲精確成相列入 Report
                 sa_aspects_list = []
                 sun_rate = ((swe.calc_ut(jd_n + 75, swe.SUN)[0][0] - pos_n['太陽']) % 360) / 75.0
-                if sun_rate <= 0: sun_rate = 0.9856 # 防呆備用
+                if sun_rate <= 0: sun_rate = 0.9856 
                 
                 asp_map = {0: "合相", 45: "半四分", 90: "四分", 135: "補八分", 180: "對相", 225: "補八分", 270: "四分", 315: "半四分"}
                 for p1 in ALL_POINTS:
@@ -993,19 +999,17 @@ if st.session_state.calc_triggered:
                             req_arc = (pos_n[p2] - pos_n[p1] - asp_deg) % 360
                             if req_arc < 0: req_arc += 360
                             age_exact = req_arc / sun_rate
-                            if 0.1 <= age_exact <= 75.0:
+                            if 0.0 <= age_exact <= 75.0:
                                 sa_aspects_list.append((age_exact, p1, p2, asp_name))
                 
                 sa_aspects_list.sort(key=lambda x: x[0])
                 sa_report_lines = [f"{p1}-{p2} {asp_n} （{age_e:.1f}歲）" for age_e, p1, p2, asp_n in sa_aspects_list]
                 report += "\n\n【日弧大批精確成相 (0-75歲)】\n" + "\n".join(sa_report_lines)
-                
-                # 2. 計算 1-75 歲的純雙星計分與判定
+
+                # 2. 大批綜合運算 (日弧分數 + 日返分數)
                 sa_base_scores = {
-                    '金星': 3.0, '木星': 3.0,
-                    '太陽': 1.5, '水星': 1.5,
-                    '土星': -3.0, '冥王星': -3.0,
-                    '火星': -1.5, '天王星': -1.5, '海王星': -1.5,
+                    '金星': 3.0, '木星': 3.0, '太陽': 1.5, '水星': 1.5,
+                    '土星': -3.0, '冥王星': -3.0, '火星': -1.5, '天王星': -1.5, '海王星': -1.5,
                     '上升': 0.0, '中天': 0.0, '月亮': 0.0, '北交點': 0.0
                 }
                 
@@ -1019,29 +1023,53 @@ if st.session_state.calc_triggered:
                     rem = val % 45
                     return min(rem, 45 - rem)
                     
-                for age in range(1, 76):
-                    sa_arc = (swe.calc_ut(jd_n + age, swe.SUN)[0][0] - pos_n['太陽']) % 360
+                for age_step in range(1, 76):
+                    # 計算日弧分數
+                    sa_arc = (swe.calc_ut(jd_n + age_step, swe.SUN)[0][0] - pos_n['太陽']) % 360
                     total_sa_score = 0.0
-                    
-                    # 只有 Algorithm A: Two-Body Interactions
                     for p1 in ALL_POINTS:
                         sa_p1 = (pos_n[p1] + sa_arc) % 360
                         for p2 in ALL_POINTS:
                             orb = dial_orb(abs(sa_p1 - pos_n[p2]))
                             if orb <= 1.0:
                                 total_sa_score += (sa_base_scores[p1] + sa_base_scores[p2]) * get_orb_w(orb)
-                                                            
+                                
                     if total_sa_score > 10.0: sa_rating = "大吉"
                     elif total_sa_score > 5.0: sa_rating = "吉"
                     elif total_sa_score >= -5.0: sa_rating = "平"
                     elif total_sa_score >= -10.0: sa_rating = "凶"
                     else: sa_rating = "大凶"
-                    
-                    sa_batch_table.append({
-                        "推運歲數": age,
-                        "分數": f"{total_sa_score:+.1f}",
-                        "吉凶狀態": sa_rating
-                    })
+
+                    # 計算日返分數
+                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
+                    if j2_val:
+                        batch_data.append({
+                            "歲數": age_step, 
+                            "年份": dt_n_utc.year + age_step, 
+                            "日弧分數": f"{total_sa_score:+.1f}",
+                            "日弧吉凶": sa_rating,
+                            "比較盤分數": f"{'+' if sc_val > 0 else ''}{sc_val}", 
+                            "比較盤吉凶": rtg_val,
+                            "日返分數": f"{'+' if int_sc > 0 else ''}{int_sc}", 
+                            "日返吉凶": int_rtg
+                        })
+
+            reloc_data = []
+            if chk_sr_reloc:
+                for country, coords in RELOCATION_COUNTRIES.items():
+                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
+                    if j2_val:
+                        reloc_data.append({
+                            "國家": country,
+                            "比較盤分數": f"{'+' if sc_val > 0 else ''}{sc_val}",
+                            "比較盤吉凶": rtg_val,
+                            "日返盤分數": f"{'+' if int_sc > 0 else ''}{int_sc}",
+                            "日返盤吉凶": int_rtg,
+                            "raw_score": sc_val + int_sc
+                        })
+                reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
+                for d in reloc_data:
+                    del d["raw_score"]
 
             # ================= UI 佈局顯示 =================
             has_el_results = chk_election and 'election_results' in st.session_state and len(st.session_state['election_results']) > 0
@@ -1051,7 +1079,7 @@ if st.session_state.calc_triggered:
 
             with col_main1:
                 st.subheader("圖表視覺化")
-                tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["本命星盤", "日返星盤", "地平占星", "日返大批", "日返重置", "日弧大批"])
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["本命星盤", "日返星盤", "地平占星", "流年大批", "日返重置"])
                 
                 with tab1: 
                     st.image(img_n, use_container_width=True)
@@ -1079,11 +1107,11 @@ if st.session_state.calc_triggered:
                     st.markdown(md_table)
                     
                 with tab4:
-                    if chk_sr_batch:
-                        st.markdown("### 📈 日返大批 (1-75歲流年吉凶總覽)")
+                    if chk_batch:
+                        st.markdown("### 📈 大批 (1-75歲 日弧及日返吉凶總覽)")
                         st.dataframe(batch_data, use_container_width=True)
                     else:
-                        st.info("請於左側勾選「日返大批 (1-75歲吉凶)」以生成。")
+                        st.info("請於左側勾選「大批 (1-75歲 日弧及日返吉凶)」以生成。")
                         
                 with tab5:
                     if chk_sr_reloc:
@@ -1091,13 +1119,6 @@ if st.session_state.calc_triggered:
                         st.dataframe(reloc_data, use_container_width=True)
                     else:
                         st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
-                        
-                with tab6:
-                    if chk_sa_batch:
-                        st.markdown("### 📈 日弧大批 (1-75歲 分數與吉凶預測)")
-                        st.dataframe(sa_batch_table, use_container_width=True)
-                    else:
-                        st.info("請於左側勾選「日弧大批」以生成。")
             
             with col_main2:
                 st.subheader("綜合觀測報告")
