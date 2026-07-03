@@ -451,34 +451,54 @@ def draw_local_space_compass(ls_data):
     buf.seek(0); plt.close()
     return buf
 
-# 💡 [修復定義] 黃道釋放函數
+# 💡 [修復定義] 黃道釋放函數 (修改為直接輸出至100年)
 def calc_zodiacal_releasing(lot_lon, birth_jd, target_jd):
+    # 強制將 target_jd 設為出生後 100 年 (約 36525 日)
+    target_jd = birth_jd + 36525.0
     start_sign = int(lot_lon // 30) % 12
     total_days = target_jd - birth_jd
-    if total_days < 0: return None, None, False
+    if total_days < 0: return []
+    
+    periods = []
     l1_sign = start_sign
     rem_days = total_days
-    while True:
-        period_days = ZR_PERIODS[l1_sign] * 360
-        if rem_days >= period_days:
-            rem_days -= period_days
-            l1_sign = (l1_sign + 1) % 12
-        else: break
-    l2_sign = l1_sign
-    months = 0
-    is_lb = False
-    while True:
-        sub_period_days = ZR_PERIODS[l2_sign] * 30
-        if rem_days >= sub_period_days:
-            rem_days -= sub_period_days
-            months += 1
-            if months == 12: 
+    accumulated_days = 0.0
+    
+    # 僅計算 L1 與 L2 (為防報告過長，只列出 L2 切換)
+    while accumulated_days < total_days:
+        l1_days = ZR_PERIODS[l1_sign] * 360
+        if accumulated_days + l1_days > total_days:
+            break
+            
+        l2_sign = l1_sign
+        months = 0
+        l1_start_jd = birth_jd + accumulated_days
+        
+        while True:
+            l2_days = ZR_PERIODS[l2_sign] * 30
+            if accumulated_days + l2_days > birth_jd + l1_start_jd + l1_days:
+                break
+                
+            is_lb = (months == 12)
+            if is_lb:
                 l2_sign = (l2_sign + 6) % 12
-                is_lb = True
-            else:
-                l2_sign = (l2_sign + 1) % 12
-        else: break
-    return l1_sign, l2_sign, is_lb
+                
+            start_dt = swe.revjul(birth_jd + accumulated_days)
+            end_dt = swe.revjul(birth_jd + accumulated_days + l2_days)
+            
+            start_str = f"{start_dt[0]}-{start_dt[1]:02d}-{start_dt[2]:02d}"
+            end_str = f"{end_dt[0]}-{end_dt[1]:02d}-{end_dt[2]:02d}"
+            
+            periods.append(f"L1 {ZODIAC_NAMES[l1_sign]} -> L2 {ZODIAC_NAMES[l2_sign]}{' (LB)' if is_lb else ''}: {start_str} ~ {end_str}")
+            
+            accumulated_days += l2_days
+            months += 1
+            if not is_lb: l2_sign = (l2_sign + 1) % 12
+            
+        l1_sign = (l1_sign + 1) % 12
+        accumulated_days = l1_start_jd + l1_days - birth_jd
+
+    return periods
 
 # ================= 3. 日返 5大吉凶分析功能 =================
 def get_aspect_and_sign_score(lon_sr, lon_n):
@@ -969,12 +989,16 @@ if st.session_state.calc_triggered:
                 report += "\n【七大希臘點位置】\n"
                 for k, v in greek.items(): report += f"{k}：{format_degree(v)} {get_house_number(v, cusps_n, h_code)}宮\n"
 
+            # 💡 [更新] 黃道釋放 100 年
             if chk_zr:
-                report += "\n【黃道釋放 Zodiacal Releasing】\n"
-                f_l1, f_l2, f_lb = calc_zodiacal_releasing(fortune % 360, jd_n, jd_p)
-                if f_l1 is not None: report += f"幸運點釋放：L1 {ZODIAC_NAMES[f_l1]} -> L2 {ZODIAC_NAMES[f_l2]}{' (解縛 LB)' if f_lb else ''}\n"
-                s_l1, s_l2, s_lb = calc_zodiacal_releasing(spirit % 360, jd_n, jd_p)
-                if s_l1 is not None: report += f"精神點釋放：L1 {ZODIAC_NAMES[s_l1]} -> L2 {ZODIAC_NAMES[s_l2]}{' (解縛 LB)' if s_lb else ''}\n"
+                report += "\n【黃道釋放 Zodiacal Releasing (100年內 L2 轉角)】\n"
+                zr_fortune_list = calc_zodiacal_releasing(fortune % 360, jd_n, jd_n + 36525.0)
+                if zr_fortune_list:
+                    report += "幸運點釋放：\n" + "\n".join(zr_fortune_list) + "\n"
+                
+                zr_spirit_list = calc_zodiacal_releasing(spirit % 360, jd_n, jd_n + 36525.0)
+                if zr_spirit_list:
+                    report += "精神點釋放：\n" + "\n".join(zr_spirit_list) + "\n"
 
             report += "\n【宮頭】\n"
             c_list_n = list(cusps_n)[1:] if len(cusps_n) == 13 else list(cusps_n)
@@ -1139,6 +1163,7 @@ if st.session_state.calc_triggered:
                         elif -4 <= int_sc <= -2: int_norm, int_rating = -1, "凶"
                         else: int_norm, int_rating = -2, "大凶"
 
+                        # 💡 修正 Key 為「日返分數」
                         batch_data.append({
                             "歲數": age_step, 
                             "年份": dt_n_utc.year + age_step, 
@@ -1171,8 +1196,8 @@ if st.session_state.calc_triggered:
                             "國家": country,
                             "比較盤分數": comp_norm,
                             "比較盤吉凶": comp_rating,
-                            "日返盤分數": int_norm,
-                            "日返盤吉凶": int_rating,
+                            "日返分數": int_norm,
+                            "日返吉凶": int_rating,
                             "raw_score": comp_norm + int_norm
                         })
                 reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
@@ -1223,11 +1248,12 @@ if st.session_state.calc_triggered:
                         st.markdown("### 📊 流年綜合運程趨勢圖 (1-75歲)")
                         chart_records = []
                         for d in batch_data:
+                            # 💡 確保讀取時的 Key 名稱一致為「日返分數」
                             chart_records.append({
                                 "歲數": d["歲數"],
                                 "日弧分數": d["日弧分數"],
                                 "比較盤分數": d["比較盤分數"],
-                                "日返盤分數": d["日返盤分數"]
+                                "日返分數": d["日返分數"]
                             })
                         df_chart = pd.DataFrame(chart_records).set_index("歲數")
                         st.line_chart(df_chart)
