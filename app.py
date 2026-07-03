@@ -68,7 +68,14 @@ def toggle_all_exclusions():
     for k in exclusion_keys:
         st.session_state[k] = target_state
 
-# 💡 [新增] 命例選擇下拉聯動函數
+# 💡 [新增聯動] 本命出生地更新時，自動同步流運目標城市
+def sync_n_loc_to_p_loc():
+    st.session_state.p_loc = st.session_state.n_loc
+
+# 💡 [新增聯動] 本命年份更新時，自動重新計算推運歲數
+def sync_target_age_from_n_year():
+    st.session_state.target_age = max(0, st.session_state.p_year - st.session_state.n_year)
+
 def on_profile_change():
     selected = st.session_state.profile_selector
     if selected != "-- 請選擇 --" and 'imported_profiles' in st.session_state:
@@ -86,7 +93,10 @@ def on_profile_change():
                         st.session_state.gender_input = p['Sex']
                     
                     place_str = p.get('Place', 'Hong Kong')
-                    st.session_state.n_loc = place_str.split()[-1] if ' ' in place_str else place_str
+                    city = place_str.split()[-1] if ' ' in place_str else place_str
+                    st.session_state.n_loc = city
+                    st.session_state.p_loc = city
+                    st.session_state.target_age = max(0, st.session_state.p_year - dt.year)
                 except Exception:
                     pass
                 break
@@ -106,6 +116,7 @@ for key in st.session_state.keys():
             if not el_city or not el_city.strip():
                 el_city = "Manchester"
             st.session_state.n_loc = el_city.strip()
+            st.session_state.p_loc = el_city.strip()
             
             st.session_state.calc_triggered = True 
             st.rerun()
@@ -121,8 +132,10 @@ def set_current_loc():
     try:
         res = requests.get('http://ip-api.com/json/', timeout=3).json()
         st.session_state.n_loc = res.get('city', 'Hong Kong')
+        st.session_state.p_loc = st.session_state.n_loc
     except:
         st.session_state.n_loc = "Hong Kong"
+        st.session_state.p_loc = "Hong Kong"
     st.session_state.calc_triggered = False
 
 def update_year_from_age():
@@ -360,7 +373,6 @@ def draw_astrology_chart(positions, asc_degree, cusps, specs, aspect_system, spe
     buf.seek(0); plt.close()
     return buf
 
-# 💡 [防護修正] 智能修復越界日期，徹底根絕 ValueError: date value out of range
 def resolve_location_and_time(loc_name, y, m, d, h, minute):
     if not loc_name or not loc_name.strip(): 
         loc_name = "Manchester"
@@ -480,7 +492,7 @@ def process_eval(title, sr_name, sr_lon, n_name, n_lon, cusps_n, h_code):
     }
     return sub_total, table_row
 
-def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc):
+def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code, dt_n_utc):
     try:
         jd_approx = swe.julday(dt_n_utc.year + age, dt_n_utc.month, dt_n_utc.day, 12.0)
         j1, j2 = jd_approx - 2, jd_approx + 2
@@ -495,6 +507,31 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
             f2 = ((swe.calc_ut(j2, swe.SUN)[0][0] - sun_n + 180) % 360 - 180)
             
         pos_sr, _, asc_sr, cusps_sr, mc_sr, speed_sr = calculate_chart_engine(j2, lat_p, lon_p, h_code)
+        
+        # 💡 判斷本命最凶星
+        is_day = 7 <= get_house_number(pos_n['太陽'], cusps_n, h_code) <= 12
+        mars_score = 0
+        saturn_score = 0
+
+        if is_day: mars_score += 3
+        else: saturn_score += 3
+
+        mars_sign = int(pos_n['火星'] // 30) % 12
+        saturn_sign = int(pos_n['土星'] // 30) % 12
+
+        if mars_sign in (DIGNITIES['火星']['陷'] + DIGNITIES['火星']['弱']): mars_score += 2
+        elif mars_sign in (DIGNITIES['火星']['廟'] + DIGNITIES['火星']['旺']): mars_score -= 2
+
+        if saturn_sign in (DIGNITIES['土星']['陷'] + DIGNITIES['土星']['弱']): saturn_score += 2
+        elif saturn_sign in (DIGNITIES['土星']['廟'] + DIGNITIES['土星']['旺']): saturn_score -= 2
+
+        if get_house_number(pos_n['火星'], cusps_n, h_code) in [6, 8, 12]: mars_score += 2
+        if get_house_number(pos_n['土星'], cusps_n, h_code) in [6, 8, 12]: saturn_score += 2
+
+        if speed_n.get('火星', 0) < 0: mars_score += 2
+        if speed_n.get('土星', 0) < 0: saturn_score += 1
+
+        most_malefic = '火星' if mars_score > saturn_score else '土星'
         
         total_sc = 0
         lines = []
@@ -521,6 +558,31 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc
         asc_ruler_sr = TRADITIONAL_RULERS[ZODIAC_NAMES[int(asc_sr // 30) % 12]]
         sc, row = process_eval("5. ASC 命主星", f"命主({asc_ruler_sr})", pos_sr[asc_ruler_sr], f"命主({asc_ruler_n})", pos_n[asc_ruler_n], cusps_n, h_code)
         total_sc += sc; lines.append(row)
+
+        # 💡 終極對撞 (本命最凶星)
+        sr_malefic_lon = pos_sr[most_malefic]
+        n_malefic_lon = pos_n[most_malefic]
+        
+        col_diff = abs(sr_malefic_lon - n_malefic_lon)
+        col_diff = min(col_diff, 360 - col_diff)
+        
+        col_sc = 0
+        col_nm = "無"
+        if col_diff <= 6.0: col_sc, col_nm = -2, "合相"
+        elif abs(col_diff - 90) <= 6.0: col_sc, col_nm = -2, "四分相"
+        elif abs(col_diff - 180) <= 6.0: col_sc, col_nm = -2, "對分相"
+        
+        col_status = "凶" if col_sc < 0 else "平"
+        
+        lines.append({
+            "評估項目": "6. 終極對撞 (本命最凶星)",
+            "日返落點": f"{most_malefic} [{format_degree(sr_malefic_lon)}]",
+            "本命對比": f"{most_malefic} [{format_degree(n_malefic_lon)} 本命 {get_house_number(n_malefic_lon, cusps_n, h_code)}宮]",
+            "準確相位": f"{col_nm} ({col_sc}分)",
+            "星座相位": "-",
+            "得分": f"{col_sc}分 ({col_status})"
+        })
+        total_sc += col_sc
         
         if total_sc > 4: rating = "大吉"
         elif 2 <= total_sc <= 4: rating = "吉"
@@ -645,7 +707,6 @@ def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
 # ================= 5. Streamlit UI 介面 =================
 st.sidebar.header("本命盤基本資訊")
 
-# 💡 [新增] 匯入 JSON 命例
 uploaded_file = st.sidebar.file_uploader("匯入 JSON 命例", type=["json"])
 if uploaded_file is not None:
     try:
@@ -662,14 +723,14 @@ name = st.sidebar.text_input("姓名", key="name_input")
 gender = st.sidebar.selectbox("性別", ["男", "女"], key="gender_input")
 
 col1, col2, col3 = st.sidebar.columns(3)
-col1.number_input("年", key="n_year", min_value=100, max_value=9000, step=1)
+col1.number_input("年", key="n_year", min_value=100, max_value=9000, step=1, on_change=sync_target_age_from_n_year)
 col2.number_input("月", key="n_month", min_value=1, max_value=12)
 col3.number_input("日", key="n_day", min_value=1, max_value=31)
 
 col4, col5 = st.sidebar.columns(2)
 col4.number_input("時", key="n_hour", min_value=0, max_value=23)
 col5.number_input("分", key="n_minute", min_value=0, max_value=59)
-st.sidebar.text_input("出生城市", key="n_loc")
+st.sidebar.text_input("出生城市", key="n_loc", on_change=sync_n_loc_to_p_loc)
 
 btn_col1, btn_col2 = st.sidebar.columns(2)
 btn_col1.button("🕒 當下時間", on_click=set_current_time, width="stretch")
@@ -751,7 +812,7 @@ chk_sa_midpoint = st.sidebar.checkbox("日弧中點")
 chk_profection = st.sidebar.checkbox("顯示小限歲數")
 chk_zr = st.sidebar.checkbox("黃道釋放")             
 chk_solar_return = st.sidebar.checkbox("計算日返星盤")
-chk_batch = st.sidebar.checkbox("大批 (1-75歲 日弧及日返吉凶)") # 💡 合併大批
+chk_batch = st.sidebar.checkbox("大批 (1-75歲 日弧及日返吉凶)") 
 chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") 
 chk_transit = st.sidebar.checkbox("計算過運行運")
 
@@ -769,7 +830,6 @@ if st.session_state.calc_triggered:
             jd_n, lat_n, lon_n, meta_n, dt_n_utc = resolve_location_and_time(st.session_state.n_loc, st.session_state.n_year, st.session_state.n_month, st.session_state.n_day, st.session_state.n_hour, st.session_state.n_minute)
             jd_p, lat_p, lon_p, meta_p, dt_p_utc = resolve_location_and_time(st.session_state.p_loc, st.session_state.p_year, st.session_state.p_month, st.session_state.p_day, st.session_state.p_hour, st.session_state.p_minute)
             
-            # 本命盤計算
             pos_n, pos_lat_n, asc_n, cusps_n, mc_n, speed_n = calculate_chart_engine(jd_n, lat_n, lon_n, h_code)
             img_n = draw_astrology_chart(pos_n, asc_n, cusps_n, aspect_specs_full, a_sys_name, speeds=speed_n)
             
@@ -806,7 +866,6 @@ if st.session_state.calc_triggered:
             detected_patterns = find_astrology_patterns(pos_n)
             report = f"== 命盤基本觀測 ==\n持有人：{st.session_state.name_input} ({st.session_state.gender_input})\n{meta_n}\n"
             
-            # 擇時掃描
             if chk_election:
                 el_city = st.session_state.get('el_loc_input', 'Manchester')
                 if not el_city or not el_city.strip(): el_city = "Manchester"
@@ -964,7 +1023,7 @@ if st.session_state.calc_triggered:
             sr_int_table = []
             
             if chk_solar_return:
-                j2_val, pos_sr, asc_sr, cusps_sr, speed_sr, sc_val, rtg_val, table_lines, int_sc, int_rtg, int_lines = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
+                j2_val, pos_sr, asc_sr, cusps_sr, speed_sr, sc_val, rtg_val, table_lines, int_sc, int_rtg, int_lines = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code, dt_n_utc)
                 if j2_val:
                     img_sr = draw_astrology_chart(pos_sr, asc_sr, cusps_sr, aspect_specs_full, a_sys_name, speeds=speed_sr)
                     sr_rating = rtg_val
@@ -983,10 +1042,8 @@ if st.session_state.calc_triggered:
                 else:
                     report += "\n\n【日返報告】\n無法計算此年份之日返星盤\n"
 
-            # 💡 [新增] 日弧精確成相列表 (0-75歲) 與 大批資料表整合
             batch_data = []
             if chk_batch:
-                # 1. 計算 0-75 歲精確成相列入 Report
                 sa_aspects_list = []
                 sun_rate = ((swe.calc_ut(jd_n + 75, swe.SUN)[0][0] - pos_n['太陽']) % 360) / 75.0
                 if sun_rate <= 0: sun_rate = 0.9856 
@@ -1006,7 +1063,6 @@ if st.session_state.calc_triggered:
                 sa_report_lines = [f"{p1}-{p2} {asp_n} （{age_e:.1f}歲）" for age_e, p1, p2, asp_n in sa_aspects_list]
                 report += "\n\n【日弧大批精確成相 (0-75歲)】\n" + "\n".join(sa_report_lines)
 
-                # 2. 大批綜合運算 (日弧分數 + 日返分數)
                 sa_base_scores = {
                     '金星': 3.0, '木星': 3.0, '太陽': 1.5, '水星': 1.5,
                     '土星': -3.0, '冥王星': -3.0, '火星': -1.5, '天王星': -1.5, '海王星': -1.5,
@@ -1024,7 +1080,6 @@ if st.session_state.calc_triggered:
                     return min(rem, 45 - rem)
                     
                 for age_step in range(1, 76):
-                    # 計算日弧分數
                     sa_arc = (swe.calc_ut(jd_n + age_step, swe.SUN)[0][0] - pos_n['太陽']) % 360
                     total_sa_score = 0.0
                     for p1 in ALL_POINTS:
@@ -1040,8 +1095,7 @@ if st.session_state.calc_triggered:
                     elif total_sa_score >= -10.0: sa_rating = "凶"
                     else: sa_rating = "大凶"
 
-                    # 計算日返分數
-                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, lat_p, lon_p, h_code, dt_n_utc)
+                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code, dt_n_utc)
                     if j2_val:
                         batch_data.append({
                             "歲數": age_step, 
@@ -1057,7 +1111,7 @@ if st.session_state.calc_triggered:
             reloc_data = []
             if chk_sr_reloc:
                 for country, coords in RELOCATION_COUNTRIES.items():
-                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
+                    j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, speed_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
                     if j2_val:
                         reloc_data.append({
                             "國家": country,
