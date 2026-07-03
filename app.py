@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
 import json
+import pandas as pd
 from kerykeion import KrInstance
 import matplotlib.pyplot as plt
 import numpy as np
@@ -68,11 +69,9 @@ def toggle_all_exclusions():
     for k in exclusion_keys:
         st.session_state[k] = target_state
 
-# 💡 [新增聯動] 本命出生地更新時，自動同步流運目標城市
 def sync_n_loc_to_p_loc():
     st.session_state.p_loc = st.session_state.n_loc
 
-# 💡 [新增聯動] 本命年份更新時，自動重新計算推運歲數
 def sync_target_age_from_n_year():
     st.session_state.target_age = max(0, st.session_state.p_year - st.session_state.n_year)
 
@@ -508,7 +507,6 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code,
             
         pos_sr, _, asc_sr, cusps_sr, mc_sr, speed_sr = calculate_chart_engine(j2, lat_p, lon_p, h_code)
         
-        # 💡 判斷本命最凶星
         is_day = 7 <= get_house_number(pos_n['太陽'], cusps_n, h_code) <= 12
         mars_score = 0
         saturn_score = 0
@@ -559,7 +557,6 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code,
         sc, row = process_eval("5. ASC 命主星", f"命主({asc_ruler_sr})", pos_sr[asc_ruler_sr], f"命主({asc_ruler_n})", pos_n[asc_ruler_n], cusps_n, h_code)
         total_sc += sc; lines.append(row)
 
-        # 💡 終極對撞 (本命最凶星)
         sr_malefic_lon = pos_sr[most_malefic]
         n_malefic_lon = pos_n[most_malefic]
         
@@ -632,7 +629,6 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code,
     except Exception:
         return None, None, None, None, None, 0, "計算失敗", [], 0, "計算失敗", []
 
-# ================= 4. 擇時過濾引擎 =================
 def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
     pos, _, asc, cusps, mc, speed = calculate_chart_engine(jd, lat, lon, h_code)
     
@@ -1104,8 +1100,8 @@ if st.session_state.calc_triggered:
                             "日弧吉凶": sa_rating,
                             "比較盤分數": f"{'+' if sc_val > 0 else ''}{sc_val}", 
                             "比較盤吉凶": rtg_val,
-                            "日返分數": f"{'+' if int_sc > 0 else ''}{int_sc}", 
-                            "日返吉凶": int_rtg
+                            "日返盤分數": f"{'+' if int_sc > 0 else ''}{int_sc}", 
+                            "日返盤吉凶": int_rtg
                         })
 
             reloc_data = []
@@ -1164,6 +1160,25 @@ if st.session_state.calc_triggered:
                     if chk_batch:
                         st.markdown("### 📈 大批 (1-75歲 日弧及日返吉凶總覽)")
                         st.dataframe(batch_data, use_container_width=True)
+                        
+                        # --- 📈 流年綜合運程趨勢圖 ---
+                        st.markdown("### 📊 流年綜合運程趨勢圖 (1-75歲)")
+                        chart_records = []
+                        for d in batch_data:
+                            try: sa_val = float(d["日弧分數"])
+                            except: sa_val = 0.0
+                            try: comp_val = float(d["比較盤分數"])
+                            except: comp_val = 0.0
+                            try: ret_val = float(d["日返盤分數"])
+                            except: ret_val = 0.0
+                            chart_records.append({
+                                "歲數": d["歲數"],
+                                "日弧分數": sa_val,
+                                "比較盤分數": comp_val,
+                                "日返盤分數": ret_val
+                            })
+                        df_chart = pd.DataFrame(chart_records).set_index("歲數")
+                        st.line_chart(df_chart, use_container_width=True)
                     else:
                         st.info("請於左側勾選「大批 (1-75歲 日弧及日返吉凶)」以生成。")
                         
