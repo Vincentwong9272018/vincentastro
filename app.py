@@ -372,6 +372,7 @@ def draw_astrology_chart(positions, asc_degree, cusps, specs, aspect_system, spe
     buf.seek(0); plt.close()
     return buf
 
+# 💡 [防護修正] 智能修復越界日期
 def resolve_location_and_time(loc_name, y, m, d, h, minute):
     if not loc_name or not loc_name.strip(): 
         loc_name = "Manchester"
@@ -449,6 +450,35 @@ def draw_local_space_compass(ls_data):
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=145)
     buf.seek(0); plt.close()
     return buf
+
+# 💡 [修復定義] 黃道釋放函數
+def calc_zodiacal_releasing(lot_lon, birth_jd, target_jd):
+    start_sign = int(lot_lon // 30) % 12
+    total_days = target_jd - birth_jd
+    if total_days < 0: return None, None, False
+    l1_sign = start_sign
+    rem_days = total_days
+    while True:
+        period_days = ZR_PERIODS[l1_sign] * 360
+        if rem_days >= period_days:
+            rem_days -= period_days
+            l1_sign = (l1_sign + 1) % 12
+        else: break
+    l2_sign = l1_sign
+    months = 0
+    is_lb = False
+    while True:
+        sub_period_days = ZR_PERIODS[l2_sign] * 30
+        if rem_days >= sub_period_days:
+            rem_days -= sub_period_days
+            months += 1
+            if months == 12: 
+                l2_sign = (l2_sign + 6) % 12
+                is_lb = True
+            else:
+                l2_sign = (l2_sign + 1) % 12
+        else: break
+    return l1_sign, l2_sign, is_lb
 
 # ================= 3. 日返 5大吉凶分析功能 =================
 def get_aspect_and_sign_score(lon_sr, lon_n):
@@ -629,6 +659,7 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code,
     except Exception:
         return None, None, None, None, None, 0, "計算失敗", [], 0, "計算失敗", []
 
+# ================= 4. 擇時過濾引擎 =================
 def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
     pos, _, asc, cusps, mc, speed = calculate_chart_engine(jd, lat, lon, h_code)
     
@@ -826,6 +857,7 @@ if st.session_state.calc_triggered:
             jd_n, lat_n, lon_n, meta_n, dt_n_utc = resolve_location_and_time(st.session_state.n_loc, st.session_state.n_year, st.session_state.n_month, st.session_state.n_day, st.session_state.n_hour, st.session_state.n_minute)
             jd_p, lat_p, lon_p, meta_p, dt_p_utc = resolve_location_and_time(st.session_state.p_loc, st.session_state.p_year, st.session_state.p_month, st.session_state.p_day, st.session_state.p_hour, st.session_state.p_minute)
             
+            # 本命盤計算
             pos_n, pos_lat_n, asc_n, cusps_n, mc_n, speed_n = calculate_chart_engine(jd_n, lat_n, lon_n, h_code)
             img_n = draw_astrology_chart(pos_n, asc_n, cusps_n, aspect_specs_full, a_sys_name, speeds=speed_n)
             
@@ -862,6 +894,7 @@ if st.session_state.calc_triggered:
             detected_patterns = find_astrology_patterns(pos_n)
             report = f"== 命盤基本觀測 ==\n持有人：{st.session_state.name_input} ({st.session_state.gender_input})\n{meta_n}\n"
             
+            # 擇時掃描
             if chk_election:
                 el_city = st.session_state.get('el_loc_input', 'Manchester')
                 if not el_city or not el_city.strip(): el_city = "Manchester"
@@ -1085,23 +1118,36 @@ if st.session_state.calc_triggered:
                             if orb <= 1.0:
                                 total_sa_score += (sa_base_scores[p1] + sa_base_scores[p2]) * get_orb_w(orb)
                                 
-                    if total_sa_score > 10.0: sa_rating = "大吉"
-                    elif total_sa_score > 5.0: sa_rating = "吉"
-                    elif total_sa_score >= -5.0: sa_rating = "平"
-                    elif total_sa_score >= -10.0: sa_rating = "凶"
-                    else: sa_rating = "大凶"
+                    if total_sa_score > 10.0: sa_norm, sa_rating = 2, "大吉"
+                    elif total_sa_score > 5.0: sa_norm, sa_rating = 1, "吉"
+                    elif total_sa_score >= -5.0: sa_norm, sa_rating = 0, "平"
+                    elif total_sa_score >= -10.0: sa_norm, sa_rating = -1, "凶"
+                    else: sa_norm, sa_rating = -2, "大凶"
 
                     j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(age_step, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code, dt_n_utc)
+                    
                     if j2_val:
+                        if sc_val > 4: comp_norm, comp_rating = 2, "大吉"
+                        elif 2 <= sc_val <= 4: comp_norm, comp_rating = 1, "吉"
+                        elif -1 <= sc_val <= 1: comp_norm, comp_rating = 0, "平"
+                        elif -4 <= sc_val <= -2: comp_norm, comp_rating = -1, "凶"
+                        else: comp_norm, comp_rating = -2, "大凶"
+
+                        if int_sc > 4: int_norm, int_rating = 2, "大吉"
+                        elif 2 <= int_sc <= 4: int_norm, int_rating = 1, "吉"
+                        elif -1 <= int_sc <= 1: int_norm, int_rating = 0, "平"
+                        elif -4 <= int_sc <= -2: int_norm, int_rating = -1, "凶"
+                        else: int_norm, int_rating = -2, "大凶"
+
                         batch_data.append({
                             "歲數": age_step, 
                             "年份": dt_n_utc.year + age_step, 
-                            "日弧分數": f"{total_sa_score:+.1f}",
+                            "日弧分數": sa_norm,
                             "日弧吉凶": sa_rating,
-                            "比較盤分數": f"{'+' if sc_val > 0 else ''}{sc_val}", 
-                            "比較盤吉凶": rtg_val,
-                            "日返盤分數": f"{'+' if int_sc > 0 else ''}{int_sc}", 
-                            "日返盤吉凶": int_rtg
+                            "比較盤分數": comp_norm, 
+                            "比較盤吉凶": comp_rating,
+                            "日返分數": int_norm, 
+                            "日返吉凶": int_rating
                         })
 
             reloc_data = []
@@ -1109,13 +1155,25 @@ if st.session_state.calc_triggered:
                 for country, coords in RELOCATION_COUNTRIES.items():
                     j2_val, _, _, _, _, sc_val, rtg_val, _, int_sc, int_rtg, _ = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, speed_n, coords['lat'], coords['lon'], h_code, dt_n_utc)
                     if j2_val:
+                        if sc_val > 4: comp_norm, comp_rating = 2, "大吉"
+                        elif 2 <= sc_val <= 4: comp_norm, comp_rating = 1, "吉"
+                        elif -1 <= sc_val <= 1: comp_norm, comp_rating = 0, "平"
+                        elif -4 <= sc_val <= -2: comp_norm, comp_rating = -1, "凶"
+                        else: comp_norm, comp_rating = -2, "大凶"
+
+                        if int_sc > 4: int_norm, int_rating = 2, "大吉"
+                        elif 2 <= int_sc <= 4: int_norm, int_rating = 1, "吉"
+                        elif -1 <= int_sc <= 1: int_norm, int_rating = 0, "平"
+                        elif -4 <= int_sc <= -2: int_norm, int_rating = -1, "凶"
+                        else: int_norm, int_rating = -2, "大凶"
+
                         reloc_data.append({
                             "國家": country,
-                            "比較盤分數": f"{'+' if sc_val > 0 else ''}{sc_val}",
-                            "比較盤吉凶": rtg_val,
-                            "日返盤分數": f"{'+' if int_sc > 0 else ''}{int_sc}",
-                            "日返盤吉凶": int_rtg,
-                            "raw_score": sc_val + int_sc
+                            "比較盤分數": comp_norm,
+                            "比較盤吉凶": comp_rating,
+                            "日返盤分數": int_norm,
+                            "日返盤吉凶": int_rating,
+                            "raw_score": comp_norm + int_norm
                         })
                 reloc_data.sort(key=lambda x: x["raw_score"], reverse=True)
                 for d in reloc_data:
@@ -1132,11 +1190,11 @@ if st.session_state.calc_triggered:
                 tab1, tab2, tab3, tab4, tab5 = st.tabs(["本命星盤", "日返星盤", "地平占星", "流年大批", "日返重置"])
                 
                 with tab1: 
-                    st.image(img_n, use_container_width=True)
+                    st.image(img_n)
                 
                 with tab2:
                     if img_sr: 
-                        st.image(img_sr, use_container_width=True)
+                        st.image(img_sr)
                         st.markdown(f"### 📊 比較盤 (5大核心交點分析) - 【{sr_rating}】")
                         st.caption(f"加總總分: {'+' if sr_total_score>0 else ''}{sr_total_score}")
                         st.table(sr_eval_table)
@@ -1148,7 +1206,7 @@ if st.session_state.calc_triggered:
                         st.info("請於左側勾選「計算日返星盤」以生成。")
                         
                 with tab3:
-                    st.image(img_ls, use_container_width=True)
+                    st.image(img_ls)
                     st.markdown("### 📍 地平占星方位數據")
                     md_table = "| 星體 | 方位角 (Azimuth) | 高度角 (Altitude) | 地理方位 |\n|---|---|---|---|\n"
                     for row in local_space_data:
@@ -1159,33 +1217,28 @@ if st.session_state.calc_triggered:
                 with tab4:
                     if chk_batch:
                         st.markdown("### 📈 大批 (1-75歲 日弧及日返吉凶總覽)")
-                        st.dataframe(batch_data, use_container_width=True)
+                        st.caption("為了解決評分標準不一導致表格混亂的問題，我已經將大批表格的分數統一轉換為標準的 5 級評分制：大吉＝2分、吉＝1分、平＝0分、凶＝-1分、大凶＝-2分。")
+                        st.dataframe(batch_data)
                         
-                        # --- 📈 流年綜合運程趨勢圖 ---
                         st.markdown("### 📊 流年綜合運程趨勢圖 (1-75歲)")
                         chart_records = []
                         for d in batch_data:
-                            try: sa_val = float(d["日弧分數"])
-                            except: sa_val = 0.0
-                            try: comp_val = float(d["比較盤分數"])
-                            except: comp_val = 0.0
-                            try: ret_val = float(d["日返盤分數"])
-                            except: ret_val = 0.0
                             chart_records.append({
                                 "歲數": d["歲數"],
-                                "日弧分數": sa_val,
-                                "比較盤分數": comp_val,
-                                "日返盤分數": ret_val
+                                "日弧分數": d["日弧分數"],
+                                "比較盤分數": d["比較盤分數"],
+                                "日返盤分數": d["日返盤分數"]
                             })
                         df_chart = pd.DataFrame(chart_records).set_index("歲數")
-                        st.line_chart(df_chart, use_container_width=True)
+                        st.line_chart(df_chart)
                     else:
                         st.info("請於左側勾選「大批 (1-75歲 日弧及日返吉凶)」以生成。")
                         
                 with tab5:
                     if chk_sr_reloc:
                         st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 各國流年吉凶)")
-                        st.dataframe(reloc_data, use_container_width=True)
+                        st.caption("為了解決評分標準不一導致表格混亂的問題，我已經將大批表格的分數統一轉換為標準的 5 級評分制：大吉＝2分、吉＝1分、平＝0分、凶＝-1分、大凶＝-2分。")
+                        st.dataframe(reloc_data)
                     else:
                         st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
             
