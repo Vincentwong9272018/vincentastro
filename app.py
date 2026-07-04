@@ -135,6 +135,7 @@ RELOCATION_COUNTRIES = {
     "津巴布韋": {"lat": -17.8216, "lon": 31.0492}
 }
 
+
 # ================= 0. Session State 狀態管理 =================
 now = datetime.datetime.now()
 
