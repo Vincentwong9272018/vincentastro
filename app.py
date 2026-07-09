@@ -1324,7 +1324,7 @@ if st.session_state.calc_triggered:
                         for p, plon in all_points_to_check.items():
                             diff = abs(slon - plon)
                             diff = min(diff, 360 - diff)
-                            if diff <= 2.5:  
+                            if diff <= 1.5:  
                                 has_conj = True
                                 p_label = PLANET_SYMBOLS[p]['sym'] if p in PLANET_SYMBOLS else p
                                 t7_html += f"<tr><td>{p_label}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
