@@ -1094,15 +1094,14 @@ if st.session_state.calc_triggered:
                 st.subheader("圖表視覺化")
                 tabs = st.tabs(["本命星盤", "日返星盤", "地平占星", "流年大批", "日返重置", "資料庫排名"])
                 
-with tabs[0]: 
+                with tabs[0]: 
                     st.image(img_n)
                     
                     # ====== 💡 古典占星狀態列表 (新增部分) ======
                     st.markdown("### 古典占星狀態列表")
                     
                     TRAD_PLANETS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星']
-                    # 將 P_MAP 改為對應的符號
-                    P_MAP = {'太陽': '☉', '月亮': '☽', '水星': '☿', '金星': '♀', '火星': '♂', '木星': '♃', '土星': '♄'}
+                    P_MAP = {'太陽':'日', '月亮':'月', '水星':'水', '金星':'金', '火星':'火', '木星':'木', '土星':'土'}
                     
                     # 1 & 2. 宮位吉凶、性質分類
                     h_dist = {i:[] for i in range(1, 13)}
@@ -1111,18 +1110,18 @@ with tabs[0]:
                             h = get_house_number(pos_n[p], cusps_n, h_code)
                             h_dist[h].append(P_MAP[p])
                             
-                    t1_good = " ".join(h_dist[1]+h_dist[3]+h_dist[4]+h_dist[5]+h_dist[7]+h_dist[9]+h_dist[10]+h_dist[11])
-                    t1_minor = " ".join(h_dist[2])
-                    t1_bad = " ".join(h_dist[6]+h_dist[8]+h_dist[12])
+                    t1_good = ",".join(h_dist[1]+h_dist[3]+h_dist[4]+h_dist[5]+h_dist[7]+h_dist[9]+h_dist[10]+h_dist[11])
+                    t1_minor = ",".join(h_dist[2])
+                    t1_bad = ",".join(h_dist[6]+h_dist[8]+h_dist[12])
                     
-                    t2_ang = " ".join(h_dist[1]+h_dist[4]+h_dist[7]+h_dist[10])
-                    t2_suc = " ".join(h_dist[2]+h_dist[5]+h_dist[8]+h_dist[11])
-                    t2_cad = " ".join(h_dist[3]+h_dist[6]+h_dist[9]+h_dist[12])
+                    t2_ang = ",".join(h_dist[1]+h_dist[4]+h_dist[7]+h_dist[10])
+                    t2_suc = ",".join(h_dist[2]+h_dist[5]+h_dist[8]+h_dist[11])
+                    t2_cad = ",".join(h_dist[3]+h_dist[6]+h_dist[9]+h_dist[12])
                     
                     table_styles = """
                     <style>
                     .cls-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; text-align: center; font-family: sans-serif; }
-                    .cls-table th { background-color: #3498db; color: white; border: 1px solid #ddd; padding: 6px; font-weight: bold; }
+                    .cls-table th { background-color: #f0f2f6; border: 1px solid #ddd; padding: 6px; font-weight: bold; }
                     .cls-table td { border: 1px solid #ddd; padding: 6px; }
                     .hl { background-color: #ffeaa7; color: black; font-weight: bold; padding: 2px 4px; border-radius: 3px; }
                     </style>
@@ -1149,34 +1148,34 @@ with tabs[0]:
                     </div>
                     ''', unsafe_allow_html=True)
                     
-                    # 古典字典與規則 (轉換為符號)
-                    domiciles = ['♂', '♀', '☿', '☽', '☉', '☿', '♀', '♂', '♃', '♄', '♄', '♃']
-                    exaltations = ['☉', '☽', '', '♃', '', '☿', '♄', '', '', '♂', '', '♀']
-                    detriments = ['♀', '♂', '♃', '♄', '♄', '♃', '♂', '♀', '☿', '☽', '☉', '☿']
-                    falls = ['♄', '', '', '♂', '', '♀', '☉', '☽', '', '♃', '', '☿']
+                    # 古典字典與規則
+                    domiciles = ['火', '金', '水', '月', '日', '水', '金', '火', '木', '土', '土', '木']
+                    exaltations = ['日', '月', '', '木', '', '水', '土', '', '', '火', '', '金']
+                    detriments = ['金', '火', '木', '土', '土', '木', '火', '金', '水', '月', '日', '水']
+                    falls = ['土', '', '', '火', '', '金', '日', '月', '', '木', '', '水']
                     
                     def get_trip(s_idx):
-                        if s_idx in [0, 4, 8]: return ['☉', '♃', '♄']
-                        if s_idx in [1, 5, 9]: return ['♀', '☽', '♂']
-                        if s_idx in [2, 6, 10]: return ['♄', '☿', '♃']
-                        return ['♀', '♂', '☽']
+                        if s_idx in [0, 4, 8]: return ['日', '木', '土']
+                        if s_idx in [1, 5, 9]: return ['金', '月', '火']
+                        if s_idx in [2, 6, 10]: return ['土', '水', '木']
+                        return ['金', '火', '月']
                         
-                    faces_seq = ['♂', '☉', '♀', '☿', '☽', '♄', '♃']
+                    faces_seq = ['火', '日', '金', '水', '月', '土', '木']
                     def get_face(s_idx, d): return faces_seq[(s_idx * 3 + int(d // 10)) % 7]
                     
                     ptolemaic_terms = {
-                        0: [(6,'♃'), (14,'♀'), (21,'☿'), (26,'♂'), (30,'♄')],
-                        1: [(8,'♀'), (15,'☿'), (22,'♃'), (26,'♄'), (30,'♂')],
-                        2: [(7,'☿'), (14,'♃'), (21,'♀'), (25,'♂'), (30,'♄')],
-                        3: [(6,'♂'), (13,'♃'), (20,'☿'), (27,'♀'), (30,'♄')],
-                        4: [(6,'♃'), (13,'♀'), (19,'♄'), (25,'☿'), (30,'♂')],
-                        5: [(7,'☿'), (13,'♀'), (18,'♃'), (24,'♄'), (30,'♂')],
-                        6: [(6,'♄'), (11,'☿'), (16,'♃'), (24,'♀'), (30,'♂')],
-                        7: [(6,'♂'), (14,'♃'), (21,'♀'), (27,'☿'), (30,'♄')],
-                        8: [(8,'♃'), (14,'♀'), (19,'☿'), (25,'♄'), (30,'♂')],
-                        9: [(6,'♀'), (12,'☿'), (19,'♃'), (25,'♂'), (30,'♄')],
-                        10: [(6,'♄'), (12,'☿'), (20,'♀'), (25,'♃'), (30,'♂')],
-                        11: [(8,'♀'), (14,'♃'), (20,'☿'), (26,'♂'), (30,'♄')]
+                        0: [(6,'木'), (14,'金'), (21,'水'), (26,'火'), (30,'土')],
+                        1: [(8,'金'), (15,'水'), (22,'木'), (26,'土'), (30,'火')],
+                        2: [(7,'水'), (14,'木'), (21,'金'), (25,'火'), (30,'土')],
+                        3: [(6,'火'), (13,'木'), (20,'水'), (27,'金'), (30,'土')],
+                        4: [(6,'木'), (13,'金'), (19,'土'), (25,'水'), (30,'火')],
+                        5: [(7,'水'), (13,'金'), (18,'木'), (24,'土'), (30,'火')],
+                        6: [(6,'土'), (11,'水'), (16,'木'), (24,'金'), (30,'火')],
+                        7: [(6,'火'), (14,'木'), (21,'金'), (27,'水'), (30,'土')],
+                        8: [(8,'木'), (14,'金'), (19,'水'), (25,'土'), (30,'火')],
+                        9: [(6,'金'), (12,'水'), (19,'木'), (25,'火'), (30,'土')],
+                        10: [(6,'土'), (12,'水'), (20,'金'), (25,'木'), (30,'火')],
+                        11: [(8,'金'), (14,'木'), (20,'水'), (26,'火'), (30,'土')]
                     }
                     def get_term(s_idx, d):
                         for e_deg, pl in ptolemaic_terms[s_idx]:
@@ -1186,15 +1185,15 @@ with tabs[0]:
                     def hl(val, target):
                         return f"<span class='hl'>{val}</span>" if val and (val == target or val in target) else val
 
-                    # 3. 先天尊貴表格 (三分分為三格，並且星座/行星皆轉符號)
-                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th>三分1</th><th>三分2</th><th>三分3</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
+                    # 3. 先天尊貴表格
+                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th>三分(+3)</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
                     for p in TRAD_PLANETS:
                         if p not in pos_n: continue
                         lon = pos_n[p]
                         s_idx = int(lon // 30) % 12
                         deg = lon % 30
                         p_sh = P_MAP[p]
-                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
+                        s_name = f"{ZODIAC_NAMES[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
                         
                         dom = domiciles[s_idx]
                         exa = exaltations[s_idx]
@@ -1211,7 +1210,8 @@ with tabs[0]:
                             -5 if p_sh == fal else 0
                         ])
                         
-                        t3_html += f"<tr><td>{P_MAP[p]}</td><td>{s_name}</td><td>{hl(dom, p_sh)}</td><td>{hl(exa, p_sh)}</td><td>{hl(trip[0], p_sh)}</td><td>{hl(trip[1], p_sh)}</td><td>{hl(trip[2], p_sh)}</td><td>{hl(term, p_sh)}</td><td>{hl(fac, p_sh)}</td><td>{hl(fal, p_sh)}</td><td>{hl(det, p_sh)}</td><td><b>{sc}</b></td></tr>"
+                        trip_str = ",".join(trip)
+                        t3_html += f"<tr><td>{p}</td><td>{s_name}</td><td>{hl(dom, p_sh)}</td><td>{hl(exa, p_sh)}</td><td>{hl(trip_str, p_sh)}</td><td>{hl(term, p_sh)}</td><td>{hl(fac, p_sh)}</td><td>{hl(fal, p_sh)}</td><td>{hl(det, p_sh)}</td><td><b>{sc}</b></td></tr>"
                     t3_html += "</table>"
                     st.markdown(t3_html, unsafe_allow_html=True)
                     
@@ -1229,22 +1229,22 @@ with tabs[0]:
                         if diff < 180: return "東出"
                         return "西入"
                         
-                    t4_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>宮</th><th>速度</th><th>狀態</th></tr>"
+                    t4_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>宮</th><th>速度</th><th>後天狀態</th></tr>"
                     sun_lon = pos_n.get('太陽', 0)
                     for p in TRAD_PLANETS:
                         if p not in pos_n: continue
                         lon = pos_n[p]
-                        s_name = f"{ZODIAC_SYMBOLS[int(lon // 30) % 12]} {int(lon % 30)}°{int(((lon%30)%1)*60):02d}'"
+                        s_name = f"{ZODIAC_NAMES[int(lon // 30) % 12]} {int(lon % 30)}°{int(((lon%30)%1)*60):02d}'"
                         h_num = get_house_number(lon, cusps_n, h_code)
                         spd_st = get_spd_state(p, speed_n.get(p, 0))
                         acc_st = get_acc_state(p, lon, sun_lon)
-                        t4_html += f"<tr><td>{P_MAP[p]}</td><td>{s_name}</td><td>{h_num}</td><td>{spd_st}</td><td>{acc_st}</td></tr>"
+                        t4_html += f"<tr><td>{p}</td><td>{s_name}</td><td>{h_num}</td><td>{spd_st}</td><td>{acc_st}</td></tr>"
                     t4_html += "</table>"
                     st.markdown(t4_html, unsafe_allow_html=True)
 
                     # 5. 宮神星 (House Almuten)
                     st.markdown("<b>宮神星 (House Almuten) 計算</b>", unsafe_allow_html=True)
-                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th>三分1</th><th>三分2</th><th>三分3</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分</th></tr>"
+                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th>三分</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分行星</th></tr>"
                     c_list_n = list(cusps_n)[1:] if len(cusps_n) == 13 else list(cusps_n)
                     for i in range(12):
                         if h_code == b'W':
@@ -1254,7 +1254,7 @@ with tabs[0]:
                             
                         s_idx = int(cusp_lon // 30) % 12
                         deg = cusp_lon % 30
-                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
+                        s_name = f"{ZODIAC_NAMES[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
                         
                         dom = domiciles[s_idx]
                         exa = exaltations[s_idx]
@@ -1275,66 +1275,12 @@ with tabs[0]:
                         
                         max_sc = max(scores.values())
                         tops = [k for k, v in scores.items() if v == max_sc and v > 0]
-                        if not tops: tops = [dom] 
-                        top_str = " / ".join(tops)
+                        if not tops: tops = [dom] # 找不到正分則預設回歸守護星
+                        top_str = "/".join(tops)
                         
-                        t5_html += f"<tr><td>{i+1}宮</td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{trip[0]}</td><td>{trip[1]}</td><td>{trip[2]}</td><td>{term}</td><td>{fac}</td><td>{fal}</td><td>{det}</td><td><b>{top_str}</b></td></tr>"
+                        t5_html += f"<tr><td>{i+1}宮</td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{','.join(trip)}</td><td>{term}</td><td>{fac}</td><td>{fal}</td><td>{det}</td><td><b>{top_str}</b></td></tr>"
                     t5_html += "</table>"
                     st.markdown(t5_html, unsafe_allow_html=True)
-
-                    # ====== 💡 6. 恆星列表與合相觀測 ======
-                    st.markdown("<b>恆星觀測 (Fixed Stars)</b>", unsafe_allow_html=True)
-                    FIXED_STARS_MAP = {
-                        "Aldebaran": "畢宿五", "Regulus": "軒轅十四", "Antares": "心宿二",
-                        "Fomalhaut": "北落師門", "Algol": "大陵五", "Alcyone": "昴宿六",
-                        "Spica": "角宿一", "Sirius": "天狼星", "Capella": "五車二",
-                        "Procyon": "南河三", "Arcturus": "大角星", "Alphecca": "貫索四",
-                        "Rigel": "參宿七", "Betelgeuse": "參宿四", "Vega": "織女一",
-                        "Altair": "河鼓二", "Deneb Algedi": "壘壁陣四"
-                    }
-                    
-                    star_positions = {}
-                    for eng, chi in FIXED_STARS_MAP.items():
-                        try:
-                            ret, _ = swe.fixstar2_ut(eng, jd_n)
-                            star_positions[chi] = ret[0]
-                        except Exception:
-                            pass
-                            
-                    t6_html = "<table class='cls-table'><tr><th>恆星</th><th>落入星座與度數</th></tr>"
-                    for chi, lon in star_positions.items():
-                        s_idx = int(lon // 30) % 12
-                        deg = lon % 30
-                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
-                        t6_html += f"<tr><td>{chi}</td><td>{s_name}</td></tr>"
-                    t6_html += "</table>"
-                    
-                    t7_html = "<table class='cls-table'><tr><th>行星</th><th>合相恆星</th><th>容許度差</th></tr>"
-                    has_conj = False
-                    for chi, slon in star_positions.items():
-                        for p, plon in pos_n.items():
-                            if p not in PLANET_SYMBOLS: continue
-                            diff = abs(slon - plon)
-                            diff = min(diff, 360 - diff)
-                            # 恆星合相通常取極窄容許度，這裡預設為 2.0 度內
-                            if diff <= 2.0:  
-                                has_conj = True
-                                p_sym = PLANET_SYMBOLS[p]['sym']
-                                t7_html += f"<tr><td>{p_sym}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
-                    if not has_conj:
-                        t7_html += "<tr><td colspan='3'>無顯著恆星合相</td></tr>"
-                    t7_html += "</table>"
-                    
-                    st.markdown(f'''
-                    <div style="display:flex; gap:20px; margin-bottom:15px;">
-                        <div style="flex:1;">
-                            {t6_html}
-                        </div>
-                        <div style="flex:1;">
-                            {t7_html}
-                        </div>
-                    </div>
-                    ''', unsafe_allow_html=True)
                 
                 # 其餘 Tabs 保持不變
                 with tabs[1]:
