@@ -1094,7 +1094,7 @@ if st.session_state.calc_triggered:
                 st.subheader("圖表視覺化")
                 tabs = st.tabs(["本命星盤", "日返星盤", "地平占星", "流年大批", "日返重置", "資料庫排名"])
                 
-with tabs[0]: 
+            with tabs[0]: 
                     st.image(img_n)
                     
                     # ====== 💡 古典占星狀態列表 (新增部分) ======
@@ -1281,6 +1281,60 @@ with tabs[0]:
                         t5_html += f"<tr><td>{i+1}宮</td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{trip[0]}</td><td>{trip[1]}</td><td>{trip[2]}</td><td>{term}</td><td>{fac}</td><td>{fal}</td><td>{det}</td><td><b>{top_str}</b></td></tr>"
                     t5_html += "</table>"
                     st.markdown(t5_html, unsafe_allow_html=True)
+
+                    # ====== 💡 6. 恆星列表與合相觀測 ======
+                    st.markdown("<b>恆星觀測 (Fixed Stars)</b>", unsafe_allow_html=True)
+                    FIXED_STARS_MAP = {
+                        "Aldebaran": "畢宿五", "Regulus": "軒轅十四", "Antares": "心宿二",
+                        "Fomalhaut": "北落師門", "Algol": "大陵五", "Alcyone": "昴宿六",
+                        "Spica": "角宿一", "Sirius": "天狼星", "Capella": "五車二",
+                        "Procyon": "南河三", "Arcturus": "大角星", "Alphecca": "貫索四",
+                        "Rigel": "參宿七", "Betelgeuse": "參宿四", "Vega": "織女一",
+                        "Altair": "河鼓二", "Deneb Algedi": "壘壁陣四"
+                    }
+                    
+                    star_positions = {}
+                    for eng, chi in FIXED_STARS_MAP.items():
+                        try:
+                            ret, _ = swe.fixstar2_ut(eng, jd_n)
+                            star_positions[chi] = ret[0]
+                        except Exception:
+                            pass
+                            
+                    t6_html = "<table class='cls-table'><tr><th>恆星</th><th>落入星座與度數</th></tr>"
+                    for chi, lon in star_positions.items():
+                        s_idx = int(lon // 30) % 12
+                        deg = lon % 30
+                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
+                        t6_html += f"<tr><td>{chi}</td><td>{s_name}</td></tr>"
+                    t6_html += "</table>"
+                    
+                    t7_html = "<table class='cls-table'><tr><th>行星</th><th>合相恆星</th><th>容許度差</th></tr>"
+                    has_conj = False
+                    for chi, slon in star_positions.items():
+                        for p, plon in pos_n.items():
+                            if p not in PLANET_SYMBOLS: continue
+                            diff = abs(slon - plon)
+                            diff = min(diff, 360 - diff)
+                            # 恆星合相通常取極窄容許度，這裡預設為 2.0 度內
+                            if diff <= 2.0:  
+                                has_conj = True
+                                p_sym = PLANET_SYMBOLS[p]['sym']
+                                t7_html += f"<tr><td>{p_sym}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
+                    if not has_conj:
+                        t7_html += "<tr><td colspan='3'>無顯著恆星合相</td></tr>"
+                    t7_html += "</table>"
+                    
+                    st.markdown(f'''
+                    <div style="display:flex; gap:20px; margin-bottom:15px;">
+                        <div style="flex:1;">
+                            {t6_html}
+                        </div>
+                        <div style="flex:1;">
+                            {t7_html}
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
                 
                 # 其餘 Tabs 保持不變
                 with tabs[1]:
