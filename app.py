@@ -1282,7 +1282,7 @@ if st.session_state.calc_triggered:
                     st.markdown(t5_html, unsafe_allow_html=True)
 
 # ====== 💡 6. 恆星列表與合相觀測 ======
-                    st.markdown("<b>恆星觀測 (Fixed Stars)</b>", unsafe_allow_html=True)
+                    st.markdown("<b>恆星合相觀測 (Fixed Stars Conjunctions)</b>", unsafe_allow_html=True)
                     
                     # 瑞士星曆表標準英文名稱與中文對照
                     FIXED_STARS_MAP = {
@@ -1294,8 +1294,7 @@ if st.session_state.calc_triggered:
                         "Altair": "河鼓二", "Deneb Algedi": "壘壁陣四"
                     }
                     
-                    # 歲差備用數據 (若 sefstars.txt 缺失，以此J2000基準計算 2026 歲差修正)
-                    # 歲差每年約增加 0.01396 度 -> 26年約增加 0.363度
+                    # 歲差備用數據 (若 sefstars.txt 缺失，以此J2000基準計算歲差修正)
                     BACKUP_STARS_J2000 = {
                         "畢宿五": 69.78, "軒轅十四": 149.83, "心宿二": 249.76,
                         "北落師門": 333.85, "大陵五": 56.17, "昴宿六": 60.00,
@@ -1318,14 +1317,6 @@ if st.session_state.calc_triggered:
                             precession = year_diff * 0.013963
                             star_positions[chi] = (BACKUP_STARS_J2000[chi] + precession) % 360
                             
-                    t6_html = "<table class='cls-table'><tr><th>恆星</th><th>落入星座與度數</th></tr>"
-                    for chi, lon in star_positions.items():
-                        s_idx = int(lon // 30) % 12
-                        deg = lon % 30
-                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
-                        t6_html += f"<tr><td>{chi}</td><td>{s_name}</td></tr>"
-                    t6_html += "</table>"
-                    
                     t7_html = "<table class='cls-table'><tr><th>星體/點位</th><th>合相恆星</th><th>容許度差</th></tr>"
                     has_conj = False
                     
@@ -1340,7 +1331,7 @@ if st.session_state.calc_triggered:
                         for p, plon in all_points_to_check.items():
                             diff = abs(slon - plon)
                             diff = min(diff, 360 - diff)
-                            # 恆星合相容許度放寬至 2.5 度，確保強烈相位能被精確捕捉
+                            # 恆星合相容許度放寬至 2.5 度
                             if diff <= 2.5:  
                                 has_conj = True
                                 p_label = PLANET_SYMBOLS[p]['sym'] if p in PLANET_SYMBOLS else p
@@ -1349,16 +1340,7 @@ if st.session_state.calc_triggered:
                         t7_html += "<tr><td colspan='3'>無顯著恆星合相</td></tr>"
                     t7_html += "</table>"
                     
-                    st.markdown(f'''
-                    <div style="display:flex; gap:20px; margin-bottom:15px;">
-                        <div style="flex:1;">
-                            {t6_html}
-                        </div>
-                        <div style="flex:1;">
-                            {t7_html}
-                        </div>
-                    </div>
-                    ''', unsafe_allow_html=True)
+                    st.markdown(t7_html, unsafe_allow_html=True)
                 
                 # 其餘 Tabs 保持不變
                 with tabs[1]:
