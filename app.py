@@ -1320,18 +1320,18 @@ if st.session_state.calc_triggered:
                     t7_html = "<table class='cls-table'><tr><th>星體/點位</th><th>合相恆星</th><th>容許度差</th></tr>"
                     has_conj = False
                     
-                    # 將 4 個軸點一併納入恆星合相計算
+                    # 取得盤中所有星體及上升(ASC)、中天(MC)
                     all_points_to_check = {k: v for k, v in pos_n.items() if k in PLANET_SYMBOLS}
-                    all_points_to_check['ASC'] = asc_n
-                    all_points_to_check['MC'] = mc_n
-                    all_points_to_check['DSC'] = (asc_n + 180) % 360
-                    all_points_to_check['IC'] = (mc_n + 180) % 360
+                    
+                    # 補充下降與天底 (因為 pos_n 預設只有上升和中天)
+                    all_points_to_check['下降 (DSC)'] = (asc_n + 180) % 360
+                    all_points_to_check['天底 (IC)'] = (mc_n + 180) % 360
                     
                     for chi, slon in star_positions.items():
                         for p, plon in all_points_to_check.items():
                             diff = abs(slon - plon)
                             diff = min(diff, 360 - diff)
-                            # 恆星合相容許度放寬至 2.5 度
+                            # 恆星合相容許度放寬至 1.5 度
                             if diff <= 1.5:  
                                 has_conj = True
                                 p_label = PLANET_SYMBOLS[p]['sym'] if p in PLANET_SYMBOLS else p
