@@ -1185,8 +1185,8 @@ if st.session_state.calc_triggered:
                     def hl(val, target):
                         return f"<span class='hl'>{val}</span>" if val and (val == target or val in target) else val
 
-                    # 3. 先天尊貴表格 (第一行三分表頭合併)
-                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th colspan='3'>三分</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
+                    # 3. 先天尊貴表格 (修正弱、陷欄位順序與扣分機制)
+                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th colspan='3'>三分</th><th>界(+2)</th><th>十(+1)</th><th>陷(-5)</th><th>弱(-4)</th><th>分數</th></tr>"
                     for p in TRAD_PLANETS:
                         if p not in pos_n: continue
                         lon = pos_n[p]
@@ -1206,11 +1206,11 @@ if st.session_state.calc_triggered:
                         sc = sum([
                             5 if p_sh == dom else 0, 4 if p_sh == exa else 0,
                             3 if p_sh in trip else 0, 2 if p_sh == term else 0,
-                            1 if p_sh == fac else 0, -4 if p_sh == det else 0,
-                            -5 if p_sh == fal else 0
+                            1 if p_sh == fac else 0, -5 if p_sh == det else 0,
+                            -4 if p_sh == fal else 0
                         ])
                         
-                        t3_html += f"<tr><td>{P_MAP[p]}</td><td>{s_name}</td><td>{hl(dom, p_sh)}</td><td>{hl(exa, p_sh)}</td><td>{hl(trip[0], p_sh)}</td><td>{hl(trip[1], p_sh)}</td><td>{hl(trip[2], p_sh)}</td><td>{hl(term, p_sh)}</td><td>{hl(fac, p_sh)}</td><td>{hl(fal, p_sh)}</td><td>{hl(det, p_sh)}</td><td><b>{sc}</b></td></tr>"
+                        t3_html += f"<tr><td>{P_MAP[p]}</td><td>{s_name}</td><td>{hl(dom, p_sh)}</td><td>{hl(exa, p_sh)}</td><td>{hl(trip[0], p_sh)}</td><td>{hl(trip[1], p_sh)}</td><td>{hl(trip[2], p_sh)}</td><td>{hl(term, p_sh)}</td><td>{hl(fac, p_sh)}</td><td>{hl(det, p_sh)}</td><td>{hl(fal, p_sh)}</td><td><b>{sc}</b></td></tr>"
                     t3_html += "</table>"
                     st.markdown(t3_html, unsafe_allow_html=True)
                     
@@ -1241,9 +1241,9 @@ if st.session_state.calc_triggered:
                     t4_html += "</table>"
                     st.markdown(t4_html, unsafe_allow_html=True)
 
-                    # 5. 宮神星 (House Almuten)
+                    # 5. 宮神星 (House Almuten) 計算 (同步修正弱、陷計分機制與排列順序)
                     st.markdown("<b>宮神星 (House Almuten) 計算</b>", unsafe_allow_html=True)
-                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th colspan='3'>三分</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分</th></tr>"
+                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th colspan='3'>三分</th><th>界</th><th>十</th><th>陷</th><th>弱</th><th>最高分</th></tr>"
                     c_list_n = list(cusps_n)[1:] if len(cusps_n) == 13 else list(cusps_n)
                     for i in range(12):
                         if h_code == b'W':
@@ -1269,22 +1269,21 @@ if st.session_state.calc_triggered:
                         for tp in trip: scores[tp] += 3
                         if term: scores[term] += 2
                         if fac: scores[fac] += 1
-                        if det: scores[det] -= 4
-                        if fal: scores[fal] -= 5
+                        if det: scores[det] -= 5  # 陷扣 5 分
+                        if fal: scores[fal] -= 4  # 弱扣 4 分
                         
                         max_sc = max(scores.values())
                         tops = [k for k, v in scores.items() if v == max_sc and v > 0]
                         if not tops: tops = [dom] 
                         top_str = " / ".join(tops)
                         
-                        t5_html += f"<tr><td>{i+1}宮</td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{trip[0]}</td><td>{trip[1]}</td><td>{trip[2]}</td><td>{term}</td><td>{fac}</td><td>{fal}</td><td>{det}</td><td><b>{top_str}</b></td></tr>"
+                        t5_html += f"<tr><td>{i+1}宮</td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{trip[0]}</td><td>{trip[1]}</td><td>{trip[2]}</td><td>{term}</td><td>{fac}</td><td>{det}</td><td>{fal}</td><td><b>{top_str}</b></td></tr>"
                     t5_html += "</table>"
                     st.markdown(t5_html, unsafe_allow_html=True)
 
-# ====== 💡 6. 恆星列表與合相觀測 ======
+                    # ====== 💡 6. 恆星列表與合相觀測 ======
                     st.markdown("<b>恆星合相觀測 (Fixed Stars Conjunctions)</b>", unsafe_allow_html=True)
                     
-                    # 瑞士星曆表標準英文名稱與中文對照
                     FIXED_STARS_MAP = {
                         "Aldebaran": "畢宿五", "Regulus": "軒轅十四", "Antares": "心宿二",
                         "Fomalhaut": "北落師門", "Algol": "大陵五", "Alcyone": "昴宿六",
@@ -1294,7 +1293,6 @@ if st.session_state.calc_triggered:
                         "Altair": "河鼓二", "Deneb Algedi": "壘壁陣四"
                     }
                     
-                    # 歲差備用數據 (若 sefstars.txt 缺失，以此J2000基準計算歲差修正)
                     BACKUP_STARS_J2000 = {
                         "畢宿五": 69.78, "軒轅十四": 149.83, "心宿二": 249.76,
                         "北落師門": 333.85, "大陵五": 56.17, "昴宿六": 60.00,
@@ -1306,13 +1304,11 @@ if st.session_state.calc_triggered:
                     
                     star_positions = {}
                     
-                    # 優先嘗試從 Swiss Ephemeris 讀取
                     for eng, chi in FIXED_STARS_MAP.items():
                         try:
                             res = swe.fixstar2_ut(eng, jd_n)
                             star_positions[chi] = res[0][0]
                         except Exception:
-                            # 備用機制：若 fixstar2_ut 報錯，改用歲差修正公式
                             year_diff = st.session_state.n_year - 2000
                             precession = year_diff * 0.013963
                             star_positions[chi] = (BACKUP_STARS_J2000[chi] + precession) % 360
@@ -1320,10 +1316,7 @@ if st.session_state.calc_triggered:
                     t7_html = "<table class='cls-table'><tr><th>星體/點位</th><th>合相恆星</th><th>容許度差</th></tr>"
                     has_conj = False
                     
-                    # 取得盤中所有星體及上升(ASC)、中天(MC)
                     all_points_to_check = {k: v for k, v in pos_n.items() if k in PLANET_SYMBOLS}
-                    
-                    # 補充下降與天底 (因為 pos_n 預設只有上升和中天)
                     all_points_to_check['下降 (DSC)'] = (asc_n + 180) % 360
                     all_points_to_check['天底 (IC)'] = (mc_n + 180) % 360
                     
@@ -1331,8 +1324,7 @@ if st.session_state.calc_triggered:
                         for p, plon in all_points_to_check.items():
                             diff = abs(slon - plon)
                             diff = min(diff, 360 - diff)
-                            # 恆星合相容許度放寬至 1.5 度
-                            if diff <= 1.5:  
+                            if diff <= 2.5:  
                                 has_conj = True
                                 p_label = PLANET_SYMBOLS[p]['sym'] if p in PLANET_SYMBOLS else p
                                 t7_html += f"<tr><td>{p_label}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
