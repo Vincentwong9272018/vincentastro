@@ -1101,7 +1101,6 @@ if st.session_state.calc_triggered:
                     st.markdown("### 古典占星狀態列表")
                     
                     TRAD_PLANETS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星']
-                    # 將 P_MAP 改為對應的符號
                     P_MAP = {'太陽': '☉', '月亮': '☽', '水星': '☿', '金星': '♀', '火星': '♂', '木星': '♃', '土星': '♄'}
                     
                     # 1 & 2. 宮位吉凶、性質分類
@@ -1149,7 +1148,7 @@ if st.session_state.calc_triggered:
                     </div>
                     ''', unsafe_allow_html=True)
                     
-                    # 古典字典與規則 (轉換為符號)
+                    # 古典字典與規則
                     domiciles = ['♂', '♀', '☿', '☽', '☉', '☿', '♀', '♂', '♃', '♄', '♄', '♃']
                     exaltations = ['☉', '☽', '', '♃', '', '☿', '♄', '', '', '♂', '', '♀']
                     detriments = ['♀', '♂', '♃', '♄', '♄', '♃', '♂', '♀', '☿', '☽', '☉', '☿']
@@ -1186,8 +1185,8 @@ if st.session_state.calc_triggered:
                     def hl(val, target):
                         return f"<span class='hl'>{val}</span>" if val and (val == target or val in target) else val
 
-                    # 3. 先天尊貴表格 (三分分為三格，並且星座/行星皆轉符號)
-                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th>三分1</th><th>三分2</th><th>三分3</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
+                    # 3. 先天尊貴表格 (第一行三分表頭合併)
+                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th colspan='3'>三分</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
                     for p in TRAD_PLANETS:
                         if p not in pos_n: continue
                         lon = pos_n[p]
@@ -1244,7 +1243,7 @@ if st.session_state.calc_triggered:
 
                     # 5. 宮神星 (House Almuten)
                     st.markdown("<b>宮神星 (House Almuten) 計算</b>", unsafe_allow_html=True)
-                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th>三分1</th><th>三分2</th><th>三分3</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分</th></tr>"
+                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th colspan='3'>三分</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分</th></tr>"
                     c_list_n = list(cusps_n)[1:] if len(cusps_n) == 13 else list(cusps_n)
                     for i in range(12):
                         if h_code == b'W':
@@ -1296,8 +1295,10 @@ if st.session_state.calc_triggered:
                     star_positions = {}
                     for eng, chi in FIXED_STARS_MAP.items():
                         try:
-                            ret, _ = swe.fixstar2_ut(eng, jd_n)
-                            star_positions[chi] = ret[0]
+                            # 修正 ValueError，解包出回傳的三個值
+                            res = swe.fixstar2_ut(eng, jd_n)
+                            # res[0] 是一組坐標，res[0][0] 即黃經 (longitude)
+                            star_positions[chi] = res[0][0]
                         except Exception:
                             pass
                             
@@ -1309,14 +1310,14 @@ if st.session_state.calc_triggered:
                         t6_html += f"<tr><td>{chi}</td><td>{s_name}</td></tr>"
                     t6_html += "</table>"
                     
-                    t7_html = "<table class='cls-table'><tr><th>行星</th><th>合相恆星</th><th>容許度差</th></tr>"
+                    t7_html = "<table class='cls-table'><tr><th>星體/點位</th><th>合相恆星</th><th>容許度差</th></tr>"
                     has_conj = False
                     for chi, slon in star_positions.items():
                         for p, plon in pos_n.items():
                             if p not in PLANET_SYMBOLS: continue
                             diff = abs(slon - plon)
                             diff = min(diff, 360 - diff)
-                            # 恆星合相通常取極窄容許度，這裡預設為 2.0 度內
+                            # 恆星合相取極窄容許度，預設為 2.0 度內
                             if diff <= 2.0:  
                                 has_conj = True
                                 p_sym = PLANET_SYMBOLS[p]['sym']
