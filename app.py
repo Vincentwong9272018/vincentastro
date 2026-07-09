@@ -1281,8 +1281,10 @@ if st.session_state.calc_triggered:
                     t5_html += "</table>"
                     st.markdown(t5_html, unsafe_allow_html=True)
 
-                    # ====== 💡 6. 恆星列表與合相觀測 ======
+# ====== 💡 6. 恆星列表與合相觀測 ======
                     st.markdown("<b>恆星觀測 (Fixed Stars)</b>", unsafe_allow_html=True)
+                    
+                    # 瑞士星曆表標準英文名稱與中文對照
                     FIXED_STARS_MAP = {
                         "Aldebaran": "畢宿五", "Regulus": "軒轅十四", "Antares": "心宿二",
                         "Fomalhaut": "北落師門", "Algol": "大陵五", "Alcyone": "昴宿六",
@@ -1292,15 +1294,29 @@ if st.session_state.calc_triggered:
                         "Altair": "河鼓二", "Deneb Algedi": "壘壁陣四"
                     }
                     
+                    # 歲差備用數據 (若 sefstars.txt 缺失，以此J2000基準計算 2026 歲差修正)
+                    # 歲差每年約增加 0.01396 度 -> 26年約增加 0.363度
+                    BACKUP_STARS_J2000 = {
+                        "畢宿五": 69.78, "軒轅十四": 149.83, "心宿二": 249.76,
+                        "北落師門": 333.85, "大陵五": 56.17, "昴宿六": 60.00,
+                        "角宿一": 203.84, "天狼星": 104.09, "五車二": 81.85,
+                        "南河三": 115.83, "大角星": 184.23, "貫索四": 232.27,
+                        "參宿七": 76.83, "參宿四": 88.75, "織女一": 285.32,
+                        "河鼓二": 297.78, "壘壁陣四": 323.55
+                    }
+                    
                     star_positions = {}
+                    
+                    # 優先嘗試從 Swiss Ephemeris 讀取
                     for eng, chi in FIXED_STARS_MAP.items():
                         try:
-                            # 修正 ValueError，解包出回傳的三個值
                             res = swe.fixstar2_ut(eng, jd_n)
-                            # res[0] 是一組坐標，res[0][0] 即黃經 (longitude)
                             star_positions[chi] = res[0][0]
                         except Exception:
-                            pass
+                            # 備用機制：若 fixstar2_ut 報錯，改用歲差修正公式
+                            year_diff = st.session_state.n_year - 2000
+                            precession = year_diff * 0.013963
+                            star_positions[chi] = (BACKUP_STARS_J2000[chi] + precession) % 360
                             
                     t6_html = "<table class='cls-table'><tr><th>恆星</th><th>落入星座與度數</th></tr>"
                     for chi, lon in star_positions.items():
@@ -1312,16 +1328,23 @@ if st.session_state.calc_triggered:
                     
                     t7_html = "<table class='cls-table'><tr><th>星體/點位</th><th>合相恆星</th><th>容許度差</th></tr>"
                     has_conj = False
+                    
+                    # 將 4 個軸點一併納入恆星合相計算
+                    all_points_to_check = {k: v for k, v in pos_n.items() if k in PLANET_SYMBOLS}
+                    all_points_to_check['ASC'] = asc_n
+                    all_points_to_check['MC'] = mc_n
+                    all_points_to_check['DSC'] = (asc_n + 180) % 360
+                    all_points_to_check['IC'] = (mc_n + 180) % 360
+                    
                     for chi, slon in star_positions.items():
-                        for p, plon in pos_n.items():
-                            if p not in PLANET_SYMBOLS: continue
+                        for p, plon in all_points_to_check.items():
                             diff = abs(slon - plon)
                             diff = min(diff, 360 - diff)
-                            # 恆星合相取極窄容許度，預設為 2.0 度內
-                            if diff <= 2.0:  
+                            # 恆星合相容許度放寬至 2.5 度，確保強烈相位能被精確捕捉
+                            if diff <= 2.5:  
                                 has_conj = True
-                                p_sym = PLANET_SYMBOLS[p]['sym']
-                                t7_html += f"<tr><td>{p_sym}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
+                                p_label = PLANET_SYMBOLS[p]['sym'] if p in PLANET_SYMBOLS else p
+                                t7_html += f"<tr><td>{p_label}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
                     if not has_conj:
                         t7_html += "<tr><td colspan='3'>無顯著恆星合相</td></tr>"
                     t7_html += "</table>"
