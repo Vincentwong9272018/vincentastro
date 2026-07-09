@@ -1094,7 +1094,7 @@ if st.session_state.calc_triggered:
                 st.subheader("圖表視覺化")
                 tabs = st.tabs(["本命星盤", "日返星盤", "地平占星", "流年大批", "日返重置", "資料庫排名"])
                 
-            with tabs[0]: 
+                with tabs[0]: 
                     st.image(img_n)
                     
                     # ====== 💡 古典占星狀態列表 (新增部分) ======
