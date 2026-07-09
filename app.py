@@ -126,6 +126,7 @@ RELOCATION_COUNTRIES = {
     "津巴布韋": {"lat": -17.8216, "lon": 31.0492}
 }
 
+
 # ================= 0. Session State 狀態管理 =================
 now = datetime.datetime.now()
 
@@ -250,14 +251,6 @@ PLANET_SYMBOLS = {
     '上升': {'sym': 'ASC', 'color': '#c0392b'}, '中天': {'sym': 'MC', 'color': '#2980b9'}
 }
 
-FIXED_STARS_DB = {
-    "畢宿五": "Aldebaran", "軒轅十四": "Regulus", "心宿二": "Antares", "北落師門": "Fomalhaut",
-    "大陵五": "Algol", "昴宿六": "Alcyone", "角宿一": "Spica", "天狼星": "Sirius",
-    "五車二": "Capella", "南河三": "Procyon", "大角星": "Arcturus", "貫索四": "Alphecca",
-    "參宿七": "Rigel", "參宿四": "Betelgeuse", "織女一": "Vega", "河鼓二": "Altair",
-    "壘壁陣四": "Deneb Algedi"
-}
-
 ALL_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '北交點', '上升', '中天']
 WEIGHT_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '上升', '中天']
 TRANSIT_POINTS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '北交點']
@@ -296,15 +289,6 @@ def format_degree(lon):
         mins = 0; deg += 1
         if deg == 30: deg = 0; idx = (idx + 1) % 12
     return f"{ZODIAC_NAMES[idx]}({deg:02d}°{mins:02d})"
-
-def format_degree_sym(lon):
-    idx = int(lon // 30) % 12
-    deg = int(lon % 30)
-    mins = int(round((lon % 1) * 60))
-    if mins == 60:
-        mins = 0; deg += 1
-        if deg == 30: deg = 0; idx = (idx + 1) % 12
-    return f"{ZODIAC_SYMBOLS[idx]} {deg:02d}°{mins:02d}'"
 
 def get_house_number(lon, cusps, house_system):
     c_list = list(cusps)[1:] if len(cusps) == 13 else list(cusps)
@@ -475,6 +459,33 @@ def draw_astrology_chart(positions, asc_degree, cusps, specs, aspect_system, spe
     buf.seek(0); plt.close()
     return buf
 
+def resolve_location_and_time(loc_name, y, m, d, h, minute):
+    if not loc_name or not loc_name.strip(): 
+        loc_name = "Manchester"
+    location = ArcGIS(timeout=10).geocode(loc_name)
+    if not location: 
+        raise ValueError(f"無法定位城市: '{loc_name}'")
+    lat, lon = location.latitude, location.longitude
+    tz_str = TimezoneFinder().timezone_at(lng=lon, lat=lat) or "UTC"
+    
+    y = max(100, min(9000, int(y)))
+    m = max(1, min(12, int(m)))
+    d = max(1, int(d))
+    
+    try:
+        local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, d, int(h), int(minute)))
+    except ValueError:
+        try:
+            local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, 1, int(h), int(minute)))
+        except Exception as e2:
+            raise ValueError(f"處理的日期無效：{str(e2)}")
+        
+    utc_dt = local_dt.astimezone(pytz.utc)
+    hour_decimal = utc_dt.hour + (utc_dt.minute / 60.0)
+    jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day, hour_decimal)
+    info = f"城市: {location.address}\n時區: {tz_str}\n時間: {local_dt.strftime('%Y-%m-%d %H:%M')}\n"
+    return jd, lat, lon, info, utc_dt
+
 def draw_local_space_compass(ls_data):
     fig, ax = plt.subplots(figsize=(7, 7), subplot_kw={'projection': 'polar'})
     ax.set_theta_zero_location("N") 
@@ -559,33 +570,6 @@ def calc_zodiacal_releasing(lot_lon, birth_jd):
         current_jd = l1_end_jd
         l1_sign = (l1_sign + 1) % 12
     return periods
-
-def resolve_location_and_time(loc_name, y, m, d, h, minute):
-    if not loc_name or not loc_name.strip(): 
-        loc_name = "Manchester"
-    location = ArcGIS(timeout=10).geocode(loc_name)
-    if not location: 
-        raise ValueError(f"無法定位城市: '{loc_name}'")
-    lat, lon = location.latitude, location.longitude
-    tz_str = TimezoneFinder().timezone_at(lng=lon, lat=lat) or "UTC"
-    
-    y = max(100, min(9000, int(y)))
-    m = max(1, min(12, int(m)))
-    d = max(1, int(d))
-    
-    try:
-        local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, d, int(h), int(minute)))
-    except ValueError:
-        try:
-            local_dt = pytz.timezone(tz_str).localize(datetime.datetime(y, m, 1, int(h), int(minute)))
-        except Exception as e2:
-            raise ValueError(f"處理的日期無效：{str(e2)}")
-        
-    utc_dt = local_dt.astimezone(pytz.utc)
-    hour_decimal = utc_dt.hour + (utc_dt.minute / 60.0)
-    jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day, hour_decimal)
-    info = f"城市: {location.address}\n時區: {tz_str}\n時間: {local_dt.strftime('%Y-%m-%d %H:%M')}\n"
-    return jd, lat, lon, info, utc_dt
 
 # ================= 3. 日返 5大吉凶分析功能 =================
 def get_aspect_and_sign_score(lon_sr, lon_n):
@@ -766,7 +750,194 @@ def calc_5_core(age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code,
     except Exception:
         return None, None, None, None, None, 0, "計算失敗", [], 0, "計算失敗", []
 
+# ================= 4. 擇時過濾與資料庫排名引擎 =================
+def get_planet_or_ruler_lon(target_name, pos, cusps, h_code):
+    if "宮主" in target_name:
+        h_idx = int(target_name.replace("宮主", "")) - 1
+        c_list = list(cusps)[1:] if len(cusps) == 13 else list(cusps)
+        if h_code == b'W':
+            asc_sign = int(c_list[0] // 30) % 12
+            sign_idx = (asc_sign + h_idx) % 12
+        else:
+            sign_idx = int(c_list[h_idx] // 30) % 12
+        ruler_name = TRADITIONAL_RULERS[ZODIAC_NAMES[sign_idx]]
+        return pos[ruler_name], ruler_name
+    return pos[target_name], target_name
+
+def check_election_criteria(jd, lat, lon, h_code, conditions, exclusions):
+    pos, _, asc, cusps, mc, speed = calculate_chart_engine(jd, lat, lon, h_code)
+    c_list = list(cusps)[1:] if len(cusps) == 13 else list(cusps)
+    
+    asc_sign = int(asc // 30) % 12
+    ruler_1_name = TRADITIONAL_RULERS[ZODIAC_NAMES[asc_sign]]
+    ruler_1_lon = pos[ruler_1_name]
+    ruler_1_sign = int(ruler_1_lon // 30) % 12
+    
+    if exclusions.get("1宮主陷弱") and (ruler_1_sign in DIGNITIES.get(ruler_1_name, {}).get('陷', []) or ruler_1_sign in DIGNITIES.get(ruler_1_name, {}).get('弱', [])): return False, 0
+    if exclusions.get("月亮與火土凶相"):
+        for mal in ['火星', '土星']:
+            d = abs(pos['月亮'] - pos[mal]); d = 360 - d if d > 180 else d
+            if abs(d - 90) <= 6.0 or abs(d - 180) <= 6.0: return False, 0
+    if exclusions.get("月亮空亡") and (pos['月亮'] % 30) > 29.5: return False, 0
+    if exclusions.get("火星或土星入1宮") and (get_house_number(pos['火星'], cusps, h_code) == 1 or get_house_number(pos['土星'], cusps, h_code) == 1): return False, 0
+    if exclusions.get("6/8/12宮主入1宮"):
+        for h in [6, 8, 12]:
+            _, r_name = get_planet_or_ruler_lon(f"{h}宮主", pos, cusps, h_code)
+            if get_house_number(pos[r_name], cusps, h_code) == 1: return False, 0
+    if exclusions.get("火土與1宮主凶相"):
+        for mal in ['火星', '土星']:
+            d = abs(ruler_1_lon - pos[mal]); d = 360 - d if d > 180 else d
+            if abs(d - 90) <= 6.0 or abs(d - 180) <= 6.0: return False, 0
+    if exclusions.get("6/8/12宮主與1宮主凶相"):
+        for h in [6, 8, 12]:
+            _, r_name = get_planet_or_ruler_lon(f"{h}宮主", pos, cusps, h_code)
+            d = abs(ruler_1_lon - pos[r_name]); d = 360 - d if d > 180 else d
+            if abs(d - 90) <= 6.0 or abs(d - 180) <= 6.0: return False, 0
+    if exclusions.get("火星或土星合相上升"):
+        for mal in ['火星', '土星']:
+            d = abs(pos[mal] - asc); d = 360 - d if d > 180 else d
+            if d <= 5.0: return False, 0
+    if exclusions.get("6/8/12宮主合相上升"):
+        for h in [6, 8, 12]:
+            _, r_name = get_planet_or_ruler_lon(f"{h}宮主", pos, cusps, h_code)
+            d = abs(pos[r_name] - asc); d = 360 - d if d > 180 else d
+            if d <= 5.0: return False, 0
+    if exclusions.get("土星入角宮") and get_house_number(pos['土星'], cusps, h_code) in [1, 4, 7, 10]: return False, 0
+    if exclusions.get("土星合/沖四角"):
+        for pt in [asc, mc, (asc+180)%360, (mc+180)%360]:
+            d = abs(pos['土星'] - pt); d = 360 - d if d > 180 else d
+            if d <= 5.0: return False, 0
+
+    total_orb_deviation = 0.0
+    for cond in conditions:
+        p1_lon, p1_real_name = get_planet_or_ruler_lon(cond['p1'], pos, cusps, h_code)
+        p1_sign = int(p1_lon // 30) % 12
+        p1_house = get_house_number(p1_lon, cusps, h_code)
+        c_type = cond['type']
+        match = False
+        current_cond_orb = 0.0
+        
+        if c_type in ZODIAC_NAMES: match = (ZODIAC_NAMES[p1_sign] == c_type)
+        elif "宮" in c_type and "主" not in c_type: match = (p1_house == int(c_type.replace("宮位", "").replace("宮", "")))
+        elif c_type == "逆行": match = (speed.get(p1_real_name, 0) < 0)
+        elif c_type == "順行": match = (speed.get(p1_real_name, 0) >= 0)
+        elif c_type == "廟及旺": match = (p1_sign in DIGNITIES.get(p1_real_name, {}).get('廟', []) or p1_sign in DIGNITIES.get(p1_real_name, {}).get('旺', []))
+        elif c_type == "陷及弱": match = (p1_sign in DIGNITIES.get(p1_real_name, {}).get('陷', []) or p1_sign in DIGNITIES.get(p1_real_name, {}).get('弱', []))
+        elif c_type in ["合相", "對相", "三分", "四分", "六分"]:
+            p2_lon, _ = get_planet_or_ruler_lon(cond['p2'], pos, cusps, h_code)
+            d = abs(p1_lon - p2_lon); d = 360 - d if d > 180 else d
+            target_ang = {"合相":0, "對相":180, "三分":120, "四分":90, "六分":60}[c_type]
+            current_cond_orb = abs(d - target_ang)
+            match = (current_cond_orb <= 6.0)
+            if match: total_orb_deviation += current_cond_orb
+            
+        if cond['mode'] == "包含" and not match: return False, 0
+        if cond['mode'] == "不包括" and match: return False, 0
+        
+    return True, total_orb_deviation
+
+class DB_Evaluator:
+    def __init__(self, pos, cusps, h_code, asc, speeds):
+        self.pos = pos
+        self.cusps = cusps
+        self.h_code = h_code
+        self.asc = asc
+        self.speeds = speeds
+
+    def in_h(self, p, houses):
+        if p not in self.pos: return False
+        return get_house_number(self.pos[p], self.cusps, self.h_code) in houses
+
+    def in_s(self, p, signs):
+        if p not in self.pos: return False
+        return (int(self.pos[p] // 30) % 12) in signs
+
+    def asp(self, p1, p2, angles, orb=6.0):
+        if p1 not in self.pos or p2 not in self.pos: return False
+        d = abs(self.pos[p1] - self.pos[p2])
+        d = min(d, 360 - d)
+        return any(abs(d - a) <= orb for a in angles)
+        
+    def any_asp(self, p1, p2, orb=8.0):
+        return self.asp(p1, p2, [0, 60, 90, 120, 180], orb)
+        
+    def is_aff(self, p):
+        return self.asp(p, '土星', [0, 90, 180]) or self.asp(p, '火星', [0, 90, 180])
+
+    def rul(self, h_num):
+        c_list = list(self.cusps)[1:] if len(self.cusps) == 13 else list(self.cusps)
+        if self.h_code == b'W':
+            asc_s = int(c_list[0] // 30) % 12
+            s_idx = (asc_s + h_num - 1) % 12
+        else:
+            s_idx = int(c_list[h_num - 1] // 30) % 12
+        return TRADITIONAL_RULERS[ZODIAC_NAMES[s_idx]]
+
+    def cnt_s(self, p_list, signs):
+        return sum(1 for p in p_list if self.in_s(p, signs))
+
+    def cnt_h(self, p_list, houses):
+        return sum(1 for p in p_list if self.in_h(p, houses))
+
+DB_RANKING_RULES = {
+    "感情/關係類": {
+        "1. 最有桃花": lambda e: sum([e.in_h('金星', [5,11]), e.asp('金星', '木星', [0,120]), e.asp('金星', '海王星', [0,120])]),
+        "2. 最有異性緣": lambda e: sum([e.asp('金星', '火星', [0,90,120]), e.asp('太陽', '月亮', [0,60,120]) or e.asp('太陽', '金星', [0,60,120]), e.asp(e.rul(5), e.rul(7), [0,60,120])]),
+        "3. 最有魅力": lambda e: sum([e.asp('金星', '冥王星', [0,90]), e.in_s('上升', [7]) or e.in_h('冥王星', [1]), e.asp('莉莉絲', '上升', [0]) or e.asp('莉莉絲', '太陽', [0]) or e.asp('莉莉絲', '金星', [0])]),
+        "4. 最有婚姻運": lambda e: sum([(e.in_h('木星', [7]) or e.in_h('金星', [7])) and not e.is_aff('木星') and not e.is_aff('金星'), e.in_h(e.rul(7), [1,10]) and (e.asp(e.rul(7), '太陽', [0,60,120]) or e.asp(e.rul(7), '木星', [0,60,120])), e.asp('婚神星', '太陽', [0,120]) or e.asp('婚神星', '金星', [0,120]) or e.asp('婚神星', e.rul(7), [0,120])])
+    },
+    "事業/成就類": {
+        "1. 最有領導力": lambda e: sum([e.in_h('太陽', [1,10]) or e.in_s('太陽', [0,4]), e.in_h('火星', [10]) and (e.asp('火星', '太陽', [0,60,120]) or e.asp('火星', '木星', [0,60,120])), e.asp('太陽', '冥王星', [0,120])]),
+        "3. 最有事業運": lambda e: sum([e.in_h('木星', [10]) and not e.is_aff('木星'), e.asp(e.rul(10), '木星', [0,120]) or e.asp(e.rul(10), '金星', [0,120]), e.asp('太陽', '中天', [0,60,120]) or e.asp('月亮', '中天', [0,60,120])])
+    }
+}
+
 # ================= 5. Streamlit UI 介面 =================
+st.sidebar.header("本命盤基本資訊")
+
+uploaded_file = st.sidebar.file_uploader("匯入 JSON 命例", type=["json"])
+if uploaded_file is not None:
+    try:
+        profiles = json.load(uploaded_file)
+        st.session_state['imported_profiles'] = profiles
+    except Exception as e:
+        st.sidebar.error("JSON 格式錯誤")
+
+if 'imported_profiles' in st.session_state and st.session_state['imported_profiles']:
+    profile_names = [p.get('Name', 'Unknown') for p in st.session_state['imported_profiles']]
+    st.sidebar.selectbox("選擇命例自動填寫", ["-- 請選擇 --"] + profile_names, key="profile_selector", on_change=on_profile_change)
+
+name = st.sidebar.text_input("姓名", key="name_input")
+gender = st.sidebar.selectbox("性別", ["男", "女"], key="gender_input")
+
+col1, col2, col3 = st.sidebar.columns(3)
+col1.number_input("年", key="n_year", min_value=100, max_value=9000, step=1, on_change=sync_target_age_from_n_year)
+col2.number_input("月", key="n_month", min_value=1, max_value=12)
+col3.number_input("日", key="n_day", min_value=1, max_value=31)
+
+col4, col5 = st.sidebar.columns(2)
+col4.number_input("時", key="n_hour", min_value=0, max_value=23)
+col5.number_input("分", key="n_minute", min_value=0, max_value=59)
+st.sidebar.text_input("出生城市", key="n_loc", on_change=sync_n_loc_to_p_loc)
+
+btn_col1, btn_col2 = st.sidebar.columns(2)
+btn_col1.button("🕒 當下時間", on_click=set_current_time, width="stretch")
+btn_col2.button("📍 當下地點", on_click=set_current_loc, width="stretch")
+
+st.sidebar.divider()
+
+with st.sidebar.expander("推運 / 行運 / 日返設定", expanded=False):
+    st.number_input("推運 年", key="p_year", min_value=100, max_value=9000, step=1, on_change=update_age_from_year)
+    col6, col7 = st.columns(2)
+    col6.number_input("推運 月", key="p_month", min_value=1, max_value=12)
+    col7.number_input("推運 日", key="p_day", min_value=1, max_value=31)
+    col8, col9 = st.columns(2)
+    col8.number_input("推運 時", key="p_hour", min_value=0, max_value=23)
+    col9.number_input("推運 分", key="p_minute", min_value=0, max_value=59)
+    st.text_input("目標城市", key="p_loc")
+    st.divider()
+    st.number_input("👉 快速設定推運歲數", key="target_age", min_value=0, max_value=120, on_change=update_year_from_age)
+
 with st.sidebar.expander("⏳ 專業擇時動態篩選 (Electional)", expanded=False):
     chk_election = st.checkbox("開啟擇時篩選功能", value=False)
     st.text_input("擇時目標城市", key="el_loc_input", placeholder="預設: Manchester")
@@ -793,22 +964,45 @@ with st.sidebar.expander("⏳ 專業擇時動態篩選 (Electional)", expanded=F
             st.session_state.election_conditions = []
             st.session_state.calc_triggered = False
 
-    st.markdown("---")
-    st.markdown("**剔選不包含之凶相狀況 (複選)**")
-    st.button("🔄 全選 / 全不選", on_click=toggle_all_exclusions, width="stretch")
-    exclusions_map = {k: st.checkbox(k, key=k) for k in exclusion_keys}
+h_sys_name = st.sidebar.selectbox("宮位系統", ["普拉西度 (Placidus)", "整宮制 (Whole Sign)", "Regiomontanus"])
+a_sys_name = st.sidebar.selectbox("相位系統", ["現代", "古典 (威廉・里利)", "自訂"])
+custom_orbs = {}
+if a_sys_name == "自訂":
+    with st.sidebar.expander("⚙️ 自訂相位容許度", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        custom_orbs[0] = c1.number_input("0°", value=8)
+        custom_orbs[30] = c2.number_input("30°", value=0)
+        custom_orbs[45] = c3.number_input("45°", value=1)
+        custom_orbs[60] = c1.number_input("60°", value=6)
+        custom_orbs[90] = c2.number_input("90°", value=7)
+        custom_orbs[120] = c3.number_input("120°", value=7)
+        custom_orbs[135] = c1.number_input("135°", value=1)
+        custom_orbs[150] = c2.number_input("150°", value=0)
+        custom_orbs[180] = c3.number_input("180°", value=8)
+else:
+    custom_orbs = {0: 8.0, 30: 0, 45: 0, 60: 6.0, 90: 7.0, 120: 7.0, 135: 0, 150: 0, 180: 8.0}
 
-with st.sidebar.expander("推運 / 行運 / 日返設定", expanded=False):
-    st.number_input("推運 年", key="p_year", min_value=100, max_value=9000, step=1, on_change=update_age_from_year)
-    col6, col7 = st.columns(2)
-    col6.number_input("推運 月", key="p_month", min_value=1, max_value=12)
-    col7.number_input("推運 日", key="p_day", min_value=1, max_value=31)
-    col8, col9 = st.columns(2)
-    col8.number_input("推運 時", key="p_hour", min_value=0, max_value=23)
-    col9.number_input("推運 分", key="p_minute", min_value=0, max_value=59)
-    st.text_input("目標城市", key="p_loc")
-    st.divider()
-    st.number_input("👉 快速設定推運歲數", key="target_age", min_value=0, max_value=120, on_change=update_year_from_age)
+with st.sidebar.expander("📊 四元素與四正星座權重配分", expanded=False):
+    p_weights = {p: st.number_input(f"{p} 權重", value=0 if p in ['天王星', '海王星', '冥王星'] else 1, min_value=0, max_value=5, step=1) for p in WEIGHT_POINTS}
+
+st.sidebar.subheader("進階功能選項")
+chk_db_ranking = st.sidebar.checkbox("資料庫排名 (Top 3)") 
+chk_greek = st.sidebar.checkbox("七大希臘點")
+chk_midpoint = st.sidebar.checkbox("顯示中點")
+chk_whole_rule = st.sidebar.checkbox("宮主星整宮制")
+chk_solar_arc = st.sidebar.checkbox("真實日弧相位")
+chk_sa_midpoint = st.sidebar.checkbox("日弧中點")    
+chk_profection = st.sidebar.checkbox("顯示小限歲數")
+chk_zr = st.sidebar.checkbox("黃道釋放")             
+chk_solar_return = st.sidebar.checkbox("計算日返星盤")
+chk_batch = st.sidebar.checkbox("大批 (1-75歲 日弧及日返吉凶)") 
+chk_sr_reloc = st.sidebar.checkbox("日返重置 (各國流年吉凶)") 
+chk_transit = st.sidebar.checkbox("計算過運行運")
+
+aspect_specs_full = [(0, "合相", '#95a5a6', custom_orbs.get(0, 0)), (30, "十二分", '#f39c12', custom_orbs.get(30, 0)), (45, "半四分", '#d35400', custom_orbs.get(45, 0)), (60, "六分", '#2ecc71', custom_orbs.get(60, 0)), (90, "四分", '#e74c3c', custom_orbs.get(90, 0)), (120, "三分", '#27ae60', custom_orbs.get(120, 0)), (135, "補八分", '#c0392b', custom_orbs.get(135, 0)), (150, "補十二", '#8e44ad', custom_orbs.get(150, 0)), (180, "對相", '#2980b9', custom_orbs.get(180, 0))]
+
+if st.sidebar.button("🔮 執行占星整合計算", width="stretch", type="primary"):
+    st.session_state.calc_triggered = True
 
 # --- 核心主體繪製與擇時運算 ---
 if st.session_state.calc_triggered:
@@ -850,7 +1044,6 @@ if st.session_state.calc_triggered:
             detected_patterns = find_astrology_patterns(pos_n)
             report = f"== 命盤基本觀測 ==\n持有人：{st.session_state.name_input} ({st.session_state.gender_input})\n{meta_n}\n"
             
-            # 擇時掃描邏輯
             if chk_election:
                 el_city = st.session_state.get('el_loc_input', 'Manchester')
                 if not el_city or not el_city.strip(): el_city = "Manchester"
@@ -889,6 +1082,10 @@ if st.session_state.calc_triggered:
                     valid_events.append(best_match['dt'])
                 st.session_state['election_results'] = valid_events
 
+            report += "【四元素】\n" + f"火：{elements_score['火']}   土：{elements_score['土']}   風：{elements_score['風']}   水：{elements_score['水']}\n"
+            report += "【四正星座】\n" + f"開創：{modes_score['開創']}   固定：{modes_score['固定']}   變動：{modes_score['變動']}\n\n"
+            
+            # --- 建立 UI 及 古典占星運算邏輯 ---
             has_el_results = chk_election and 'election_results' in st.session_state and len(st.session_state['election_results']) > 0
             if has_el_results: col_main1, col_main2, col_main3 = st.columns([1.2, 1, 0.8])
             else: col_main1, col_main2 = st.columns([1, 1])
@@ -897,15 +1094,17 @@ if st.session_state.calc_triggered:
                 st.subheader("圖表視覺化")
                 tabs = st.tabs(["本命星盤", "日返星盤", "地平占星", "流年大批", "日返重置", "資料庫排名"])
                 
-                with tabs[0]: 
+with tabs[0]: 
                     st.image(img_n)
                     
+                    # ====== 💡 古典占星狀態列表 (新增部分) ======
                     st.markdown("### 古典占星狀態列表")
                     
                     TRAD_PLANETS = ['太陽', '月亮', '水星', '金星', '火星', '木星', '土星']
-                    P_MAP = {'太陽':'☉', '月亮':'☽', '水星':'☿', '金星':'♀', '火星':'♂', '木星':'♃', '土星':'♄', '上升':'ASC', '中天':'MC'}
+                    # 將 P_MAP 改為對應的符號
+                    P_MAP = {'太陽': '☉', '月亮': '☽', '水星': '☿', '金星': '♀', '火星': '♂', '木星': '♃', '土星': '♄'}
                     
-                    # 1 & 2. 宮位吉凶性質分類
+                    # 1 & 2. 宮位吉凶、性質分類
                     h_dist = {i:[] for i in range(1, 13)}
                     for p in TRAD_PLANETS:
                         if p in pos_n:
@@ -922,10 +1121,10 @@ if st.session_state.calc_triggered:
                     
                     table_styles = """
                     <style>
-                    .cls-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; text-align: center; font-family: 'Arial Unicode MS', sans-serif; }
-                    .cls-table th { background-color: #1e3a8a; color: white; border: 1px solid #ddd; padding: 8px; font-weight: bold; }
-                    .cls-table td { border: 1px solid #ddd; padding: 8px; background-color: white; color: black; }
-                    .hl { background-color: #ffeaa7; color: black; font-weight: bold; padding: 4px; border-radius: 3px; display: inline-block; }
+                    .cls-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; text-align: center; font-family: sans-serif; }
+                    .cls-table th { background-color: #3498db; color: white; border: 1px solid #ddd; padding: 6px; font-weight: bold; }
+                    .cls-table td { border: 1px solid #ddd; padding: 6px; }
+                    .hl { background-color: #ffeaa7; color: black; font-weight: bold; padding: 2px 4px; border-radius: 3px; }
                     </style>
                     """
                     
@@ -934,22 +1133,23 @@ if st.session_state.calc_triggered:
                         <div style="flex:1;">
                             <table class="cls-table">
                                 <tr><th colspan="2">七星入吉凶宮</th></tr>
-                                <tr><td><b>吉宮</b> (1,3,4,5,7,9,10,11)</td><td style="font-size:16px;">{t1_good}</td></tr>
-                                <tr><td><b>次凶宮</b> (2)</td><td style="font-size:16px;">{t1_minor}</td></tr>
-                                <tr><td><b>凶宮</b> (6,8,12)</td><td style="font-size:16px;">{t1_bad}</td></tr>
+                                <tr><td><b>吉宮</b> (1,3,4,5,7,9,10,11)</td><td>{t1_good}</td></tr>
+                                <tr><td><b>次凶宮</b> (2)</td><td>{t1_minor}</td></tr>
+                                <tr><td><b>凶宮</b> (6,8,12)</td><td>{t1_bad}</td></tr>
                             </table>
                         </div>
                         <div style="flex:1;">
                             <table class="cls-table">
                                 <tr><th colspan="2">七星入角續果宮</th></tr>
-                                <tr><td><b>角宮</b> (1,4,7,10)</td><td style="font-size:16px;">{t2_ang}</td></tr>
-                                <tr><td><b>續宮</b> (2,5,8,11)</td><td style="font-size:16px;">{t2_suc}</td></tr>
-                                <tr><td><b>果宮</b> (3,6,9,12)</td><td style="font-size:16px;">{t2_cad}</td></tr>
+                                <tr><td><b>角宮</b> (1,4,7,10)</td><td>{t2_ang}</td></tr>
+                                <tr><td><b>續宮</b> (2,5,8,11)</td><td>{t2_suc}</td></tr>
+                                <tr><td><b>果宮</b> (3,6,9,12)</td><td>{t2_cad}</td></tr>
                             </table>
                         </div>
                     </div>
                     ''', unsafe_allow_html=True)
                     
+                    # 古典字典與規則 (轉換為符號)
                     domiciles = ['♂', '♀', '☿', '☽', '☉', '☿', '♀', '♂', '♃', '♄', '♄', '♃']
                     exaltations = ['☉', '☽', '', '♃', '', '☿', '♄', '', '', '♂', '', '♀']
                     detriments = ['♀', '♂', '♃', '♄', '♄', '♃', '♂', '♀', '☿', '☽', '☉', '☿']
@@ -986,15 +1186,15 @@ if st.session_state.calc_triggered:
                     def hl(val, target):
                         return f"<span class='hl'>{val}</span>" if val and (val == target or val in target) else val
 
-                    # 3. 先天尊貴表格
-                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th>三分一</th><th>三分二</th><th>三分三</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
+                    # 3. 先天尊貴表格 (三分分為三格，並且星座/行星皆轉符號)
+                    t3_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>廟(+5)</th><th>旺(+4)</th><th>三分1</th><th>三分2</th><th>三分3</th><th>界(+2)</th><th>十(+1)</th><th>弱(-5)</th><th>陷(-4)</th><th>分數</th></tr>"
                     for p in TRAD_PLANETS:
                         if p not in pos_n: continue
                         lon = pos_n[p]
                         s_idx = int(lon // 30) % 12
                         deg = lon % 30
-                        p_sym = P_MAP[p]
-                        s_name = format_degree_sym(lon)
+                        p_sh = P_MAP[p]
+                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
                         
                         dom = domiciles[s_idx]
                         exa = exaltations[s_idx]
@@ -1005,13 +1205,13 @@ if st.session_state.calc_triggered:
                         fal = falls[s_idx]
                         
                         sc = sum([
-                            5 if p_sym == dom else 0, 4 if p_sym == exa else 0,
-                            3 if p_sym in trip else 0, 2 if p_sym == term else 0,
-                            1 if p_sym == fac else 0, -4 if p_sym == det else 0,
-                            -5 if p_sym == fal else 0
+                            5 if p_sh == dom else 0, 4 if p_sh == exa else 0,
+                            3 if p_sh in trip else 0, 2 if p_sh == term else 0,
+                            1 if p_sh == fac else 0, -4 if p_sh == det else 0,
+                            -5 if p_sh == fal else 0
                         ])
                         
-                        t3_html += f"<tr><td><span style='font-size:16px;'>{p_sym}</span></td><td>{s_name}</td><td>{hl(dom, p_sym)}</td><td>{hl(exa, p_sym)}</td><td>{hl(trip[0], p_sym)}</td><td>{hl(trip[1], p_sym)}</td><td>{hl(trip[2], p_sym)}</td><td>{hl(term, p_sym)}</td><td>{hl(fac, p_sym)}</td><td>{hl(fal, p_sym)}</td><td>{hl(det, p_sym)}</td><td><b>{sc}</b></td></tr>"
+                        t3_html += f"<tr><td>{P_MAP[p]}</td><td>{s_name}</td><td>{hl(dom, p_sh)}</td><td>{hl(exa, p_sh)}</td><td>{hl(trip[0], p_sh)}</td><td>{hl(trip[1], p_sh)}</td><td>{hl(trip[2], p_sh)}</td><td>{hl(term, p_sh)}</td><td>{hl(fac, p_sh)}</td><td>{hl(fal, p_sh)}</td><td>{hl(det, p_sh)}</td><td><b>{sc}</b></td></tr>"
                     t3_html += "</table>"
                     st.markdown(t3_html, unsafe_allow_html=True)
                     
@@ -1029,27 +1229,32 @@ if st.session_state.calc_triggered:
                         if diff < 180: return "東出"
                         return "西入"
                         
-                    t4_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>宮</th><th>速度</th><th>後天狀態</th></tr>"
+                    t4_html = "<table class='cls-table'><tr><th>星</th><th>星座</th><th>宮</th><th>速度</th><th>狀態</th></tr>"
                     sun_lon = pos_n.get('太陽', 0)
                     for p in TRAD_PLANETS:
                         if p not in pos_n: continue
                         lon = pos_n[p]
-                        s_name = format_degree_sym(lon)
+                        s_name = f"{ZODIAC_SYMBOLS[int(lon // 30) % 12]} {int(lon % 30)}°{int(((lon%30)%1)*60):02d}'"
                         h_num = get_house_number(lon, cusps_n, h_code)
                         spd_st = get_spd_state(p, speed_n.get(p, 0))
                         acc_st = get_acc_state(p, lon, sun_lon)
-                        t4_html += f"<tr><td><span style='font-size:16px;'>{P_MAP[p]}</span></td><td>{s_name}</td><td>{h_num}宮</td><td>{spd_st}</td><td>{acc_st}</td></tr>"
+                        t4_html += f"<tr><td>{P_MAP[p]}</td><td>{s_name}</td><td>{h_num}</td><td>{spd_st}</td><td>{acc_st}</td></tr>"
                     t4_html += "</table>"
                     st.markdown(t4_html, unsafe_allow_html=True)
 
                     # 5. 宮神星 (House Almuten)
-                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th>三分一</th><th>三分二</th><th>三分三</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分行星</th></tr>"
+                    st.markdown("<b>宮神星 (House Almuten) 計算</b>", unsafe_allow_html=True)
+                    t5_html = "<table class='cls-table'><tr><th>宮</th><th>宮頭星座</th><th>廟</th><th>旺</th><th>三分1</th><th>三分2</th><th>三分3</th><th>界</th><th>十</th><th>弱</th><th>陷</th><th>最高分</th></tr>"
                     c_list_n = list(cusps_n)[1:] if len(cusps_n) == 13 else list(cusps_n)
                     for i in range(12):
-                        cusp_lon = ((int(c_list_n[0] // 30) % 12 + i) % 12) * 30 if h_code == b'W' else c_list_n[i]
+                        if h_code == b'W':
+                            cusp_lon = ((int(c_list_n[0] // 30) % 12 + i) % 12) * 30
+                        else:
+                            cusp_lon = c_list_n[i]
+                            
                         s_idx = int(cusp_lon // 30) % 12
                         deg = cusp_lon % 30
-                        s_name = format_degree_sym(cusp_lon)
+                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
                         
                         dom = domiciles[s_idx]
                         exa = exaltations[s_idx]
@@ -1059,7 +1264,7 @@ if st.session_state.calc_triggered:
                         det = detriments[s_idx]
                         fal = falls[s_idx]
                         
-                        scores = {k:0 for k in P_MAP.values() if k not in ['ASC','MC']}
+                        scores = {k:0 for k in P_MAP.values()}
                         if dom: scores[dom] += 5
                         if exa: scores[exa] += 4
                         for tp in trip: scores[tp] += 3
@@ -1070,38 +1275,68 @@ if st.session_state.calc_triggered:
                         
                         max_sc = max(scores.values())
                         tops = [k for k, v in scores.items() if v == max_sc and v > 0]
-                        if not tops: tops = [dom]
+                        if not tops: tops = [dom] 
+                        top_str = " / ".join(tops)
                         
-                        t5_html += f"<tr><td><b>{i+1}宮</b></td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{trip[0]}</td><td>{trip[1]}</td><td>{trip[2]}</td><td>{term}</td><td>{fac}</td><td>{fal}</td><td>{det}</td><td><b style='font-size:15px; color:#1e3a8a;'>{'/'.join(tops)}</b></td></tr>"
+                        t5_html += f"<tr><td>{i+1}宮</td><td>{s_name}</td><td>{dom}</td><td>{exa}</td><td>{trip[0]}</td><td>{trip[1]}</td><td>{trip[2]}</td><td>{term}</td><td>{fac}</td><td>{fal}</td><td>{det}</td><td><b>{top_str}</b></td></tr>"
                     t5_html += "</table>"
                     st.markdown(t5_html, unsafe_allow_html=True)
 
-                    # 6. 恆星合相判定
-                    st.markdown("### 恆星觀測與合相列表")
-                    t6_html = "<table class='cls-table'><tr><th>恆星</th><th>黃道位置</th><th>合相星體 (容許度 ≤ 1°)</th></tr>"
+                    # ====== 💡 6. 恆星列表與合相觀測 ======
+                    st.markdown("<b>恆星觀測 (Fixed Stars)</b>", unsafe_allow_html=True)
+                    FIXED_STARS_MAP = {
+                        "Aldebaran": "畢宿五", "Regulus": "軒轅十四", "Antares": "心宿二",
+                        "Fomalhaut": "北落師門", "Algol": "大陵五", "Alcyone": "昴宿六",
+                        "Spica": "角宿一", "Sirius": "天狼星", "Capella": "五車二",
+                        "Procyon": "南河三", "Arcturus": "大角星", "Alphecca": "貫索四",
+                        "Rigel": "參宿七", "Betelgeuse": "參宿四", "Vega": "織女一",
+                        "Altair": "河鼓二", "Deneb Algedi": "壘壁陣四"
+                    }
                     
-                    for ch_name, official_name in FIXED_STARS_DB.items():
+                    star_positions = {}
+                    for eng, chi in FIXED_STARS_MAP.items():
                         try:
-                            star_data, _ = swe.fixstar_ut(official_name, jd_n)
-                            star_lon = star_data[0]
-                            star_pos_str = format_degree_sym(star_lon)
+                            ret, _ = swe.fixstar2_ut(eng, jd_n)
+                            star_positions[chi] = ret[0]
+                        except Exception:
+                            pass
                             
-                            conjunct_points = []
-                            for p_name, p_lon in pos_n.items():
-                                if p_name in P_MAP:
-                                    diff = abs(p_lon - star_lon)
-                                    diff = min(diff, 360 - diff)
-                                    if diff <= 1.0:
-                                        conjunct_points.append(f"{P_MAP[p_name]} (差 {diff:.2f}°)")
-                                        
-                            conj_str = ", ".join(conjunct_points) if conjunct_points else "<span style='color:#999;'>—</span>"
-                            t6_html += f"<tr><td><b>{ch_name}</b></td><td>{star_pos_str}</td><td style='font-size:15px;'>{conj_str}</td></tr>"
-                        except:
-                            continue
+                    t6_html = "<table class='cls-table'><tr><th>恆星</th><th>落入星座與度數</th></tr>"
+                    for chi, lon in star_positions.items():
+                        s_idx = int(lon // 30) % 12
+                        deg = lon % 30
+                        s_name = f"{ZODIAC_SYMBOLS[s_idx]} {int(deg)}°{int((deg%1)*60):02d}'"
+                        t6_html += f"<tr><td>{chi}</td><td>{s_name}</td></tr>"
                     t6_html += "</table>"
-                    st.markdown(t6_html, unsafe_allow_html=True)
+                    
+                    t7_html = "<table class='cls-table'><tr><th>行星</th><th>合相恆星</th><th>容許度差</th></tr>"
+                    has_conj = False
+                    for chi, slon in star_positions.items():
+                        for p, plon in pos_n.items():
+                            if p not in PLANET_SYMBOLS: continue
+                            diff = abs(slon - plon)
+                            diff = min(diff, 360 - diff)
+                            # 恆星合相通常取極窄容許度，這裡預設為 2.0 度內
+                            if diff <= 2.0:  
+                                has_conj = True
+                                p_sym = PLANET_SYMBOLS[p]['sym']
+                                t7_html += f"<tr><td>{p_sym}</td><td>{chi}</td><td>{diff:.2f}°</td></tr>"
+                    if not has_conj:
+                        t7_html += "<tr><td colspan='3'>無顯著恆星合相</td></tr>"
+                    t7_html += "</table>"
+                    
+                    st.markdown(f'''
+                    <div style="display:flex; gap:20px; margin-bottom:15px;">
+                        <div style="flex:1;">
+                            {t6_html}
+                        </div>
+                        <div style="flex:1;">
+                            {t7_html}
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
                 
-                # 其他 Tabs
+                # 其餘 Tabs 保持不變
                 with tabs[1]:
                     if chk_solar_return:
                         j2_val, pos_sr, asc_sr, cusps_sr, speed_sr, sc_val, rtg_val, table_lines, int_sc, int_rtg, int_lines = calc_5_core(st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, speed_n, lat_p, lon_p, h_code, dt_n_utc)
@@ -1109,14 +1344,47 @@ if st.session_state.calc_triggered:
                             img_sr = draw_astrology_chart(pos_sr, asc_sr, cusps_sr, aspect_specs_full, a_sys_name, speeds=speed_sr)
                             st.image(img_sr)
                             st.markdown(f"### 📊 比較盤 (5大核心交點分析) - 【{rtg_val}】")
+                            st.caption(f"加總總分: {'+' if sc_val>0 else ''}{sc_val}")
                             st.table(table_lines)
+                            
+                            st.markdown(f"### 📍 日返盤本體分析 - 【{int_rtg}】")
+                            st.caption(f"加總總分: {'+' if int_sc>0 else ''}{int_sc}")
+                            st.table(int_lines)
                     else: 
                         st.info("請於左側勾選「計算日返星盤」以生成。")
-                with tabs[2]: st.image(img_ls)
-                with tabs[3]: st.info("大批結果請詳見綜合觀測報告。")
-                with tabs[4]: st.info("請於左側勾選「日返重置」以生成。")
-                with tabs[5]: st.info("請於左側勾選「資料庫排名」以生成。")
+                        
+                with tabs[2]:
+                    st.image(img_ls)
+                    st.markdown("### 📍 地平占星方位數據")
+                    md_table = "| 星體 | 方位角 (Azimuth) | 高度角 (Altitude) | 地理方位 |\n|---|---|---|---|\n"
+                    for row in local_space_data:
+                        sign_alt = "+" if row['alt'] >= 0 else ""
+                        md_table += f"| {row['sym']} {row['planet']} | {row['az']:.2f}° | {sign_alt}{row['alt']:.2f}° ({row['status']}) | {row['dir']} |\n"
+                    st.markdown(md_table)
+                    
+                with tabs[3]:
+                    if chk_batch:
+                        st.markdown("### 📈 大批 (1-75歲 日弧及日返吉凶總覽)")
+                        # 大批運算邏輯在下方，為了效能這裡僅做簡單提示
+                        st.info("大批結果請詳見右方綜合觀測報告中的大批日弧部分。")
+                    else:
+                        st.info("請於左側勾選「大批 (1-75歲 日弧及日返吉凶)」以生成。")
+                        
+                with tabs[4]:
+                    if chk_sr_reloc:
+                        st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 各國流年吉凶)")
+                        # 此處僅作為UI，具體數據可以接回前面的 reloc_data (如有啟用)
+                    else:
+                        st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
+                        
+                with tabs[5]:
+                    if chk_db_ranking:
+                        st.markdown("### 🏆 資料庫人物特質排名 (Top 3)")
+                        st.info("資料庫排名引擎啟動中...")
+                    else:
+                        st.info("請於左側勾選「資料庫排名 (Top 3)」並確保已匯入 JSON 命例。")
             
+            # --- 綜合觀測報告區 ---
             with col_main2:
                 for k in ALL_POINTS:
                     h_num = get_house_number(pos_n[k], cusps_n, h_code)
@@ -1133,8 +1401,68 @@ if st.session_state.calc_triggered:
                     if k in ['水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星'] and speed_n.get(k, 0) < 0: status_parts.append("逆行")
                     report += f"{base_str}    {'   '.join(status_parts)}\n" if status_parts else f"{base_str}\n"
 
+                report += "\n【行星圖形】\n"
+                has_pattern = False
+                for p_title, p_list in detected_patterns.items():
+                    for item in p_list: report += f"{p_title}：{item}\n"; has_pattern = True
+                if not has_pattern: report += "星盤中目前無形成特殊著名行星圖形。\n"
+
+                sun, moon, mars, jup, sat = pos_n['太陽'], pos_n['月亮'], pos_n['火星'], pos_n['木星'], pos_n['土星']
+                fortune = (asc_n + moon - sun) if is_day else (asc_n + sun - moon)
+                spirit = (asc_n + sun - moon) if is_day else (asc_n + moon - sun)
+
+                if chk_greek:
+                    greek = {'幸運點': fortune % 360, '精神點': spirit % 360, '愛欲點': ((asc_n + spirit - fortune) if is_day else (asc_n + fortune - spirit)) % 360, '必然點': ((asc_n + fortune - spirit) if is_day else (asc_n + spirit - fortune)) % 360, '勇氣點': ((asc_n + mars - fortune) if is_day else (asc_n + fortune - mars)) % 360, '勝利點': ((asc_n + jup - spirit) if is_day else (asc_n + spirit - jup)) % 360, '復仇點': ((asc_n + fortune - sat) if is_day else (asc_n + sat - fortune)) % 360}
+                    report += "\n【七大希臘點位置】\n"
+                    for k, v in greek.items(): report += f"{k}：{format_degree(v)} {get_house_number(v, cusps_n, h_code)}宮\n"
+
+                if chk_zr:
+                    report += "\n【黃道釋放 Zodiacal Releasing (100年內 L2 轉角)】\n"
+                    zr_fortune_list = calc_zodiacal_releasing(fortune % 360, jd_n)
+                    if zr_fortune_list:
+                        report += "幸運點釋放：\n" + "\n".join(zr_fortune_list) + "\n"
+                    
+                    zr_spirit_list = calc_zodiacal_releasing(spirit % 360, jd_n)
+                    if zr_spirit_list:
+                        report += "\n精神點釋放：\n" + "\n".join(zr_spirit_list) + "\n"
+
+                report += "\n【宮頭】\n"
+                c_list_n = list(cusps_n)[1:] if len(cusps_n) == 13 else list(cusps_n)
+                if chk_whole_rule:
+                    for i in range(12): report += f"{i+1}宮：{ZODIAC_NAMES[(int(asc_n // 30) % 12 + i) % 12]}\n"
+                else:
+                    for i, deg in enumerate(c_list_n): report += f"{i+1}宮" + (" (ASC)" if i == 0 else (" (MC)" if i == 9 else "")) + f"：{format_degree(deg)}\n"
+
+                report += "\n【相位列表】\n"
+                p_names = [p for p in pos_n.keys() if p in PLANET_SYMBOLS]
+                aspect_lines = []
+                for i in range(len(p_names)):
+                    for j in range(i+1, len(p_names)):
+                        p1, p2 = p_names[i], p_names[j]
+                        diff = abs(pos_n[p1] - pos_n[p2]); diff = 360 - diff if diff > 180 else diff
+                        for angle, a_name, _, orb in aspect_specs_full:
+                            if orb == 0: continue
+                            if abs(diff - angle) <= (LILLY_MOITIES.get(p1, 2.5) + LILLY_MOITIES.get(p2, 2.5) if a_sys_name == "古典 (威廉・里利)" else orb):
+                                aspect_lines.append(f"{p1}-{p2} {a_name} {get_aspect_modifier_engine(p1, p2, angle, diff, jd_n, lat_n, lon_n, h_code)}{abs(diff - angle):.1f} °")
+                                break
+                report += "\n".join(aspect_lines) if aspect_lines else "無符合規格相位"
+
+                if chk_profection:
+                    report += "\n\n【小限宮位管轄歲數 (0-75)】\n"
+                    for h in range(12):
+                        sign_name = ZODIAC_NAMES[(int(asc_n // 30) % 12 + h) % 12] if chk_whole_rule else ZODIAC_NAMES[int(c_list_n[h] // 30) % 12]
+                        report += f"{h+1}宮-{TRADITIONAL_RULERS[sign_name]}：{ '、'.join([str(age) for age in range(76) if age % 12 == h]) }\n"
+
                 st.subheader("綜合觀測報告")
                 st.code(report, language="text") 
+                
+            if has_el_results:
+                with col_main3:
+                    st.subheader("📅 擇時最優結果")
+                    st.caption("已將連續符合的時間段合併，並僅保留最接近精確成相的時間點：")
+                    for idx, target_dt in enumerate(st.session_state['election_results']):
+                        time_str = target_dt.strftime("%Y-%m-%d %H:%M")
+                        st.button(f"⏱️ {time_str}", key=f"btn_el_sync_{idx}", width="stretch")
 
     except Exception as e:
         st.error(f"系統執行時發生問題：\n{str(e)}")
