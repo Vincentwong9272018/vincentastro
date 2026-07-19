@@ -1370,39 +1370,46 @@ if st.session_state.calc_triggered:
                         
                 with tabs[4]:
                     if chk_sr_reloc:
-                        st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 各國流年吉凶)")
+                        st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 全球各國流年吉凶)")
         
-                        # 準備資料儲存
-                        reloc_data = []
-                        # 定義你想測試的城市
-                        test_cities = ["香港", "東京", "倫敦", "紐約"] 
-        
-                        for city_name in test_cities:
-                            if city_name in RELOCATION_COUNTRIES:
-                                loc = RELOCATION_COUNTRIES[city_name]
-                                # 重新定位計算
-                                _, _, _, _, dt_reloc = resolve_location_and_time(city_name, st.session_state.p_year, st.session_state.p_month, st.session_state.p_day, st.session_state.p_hour, st.session_state.p_minute)
+                        if st.button("開始計算全球重置評級"):
+                            with st.spinner('正在計算全球 ' + str(len(RELOCATION_COUNTRIES)) + ' 個地區的日返流年...'):
+                                reloc_data = []
                 
-                                # 這裡調用你的核心計算函式
-                                _, _, _, _, _, sc_val, rtg_val, _, _, _, _ = calc_5_core(
-                                    st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, speed_n, 
-                                    loc['lat'], loc['lon'], h_code, dt_n_utc
-                                )
+                                # 遍歷所有預定義國家
+                                for city_name, loc in RELOCATION_COUNTRIES.items():
+                                    try:
+                                        # 呼叫核心計算函式 (calc_5_core)
+                                       # 注意：這裡假設 jd_n, pos_n, asc_n, cusps_n, speed_n, dt_n_utc 
+                                        # 已經在上方的主區塊計算完畢並存在作用域中
+                                        _, _, _, _, _, sc_val, rtg_val, _, _, _, _ = calc_5_core(
+                                            st.session_state.target_age, 
+                                            jd_n, pos_n, asc_n, cusps_n, speed_n, 
+                                            loc['lat'], loc['lon'], h_code, dt_n_utc
+                                        )
+                        
+                                        reloc_data.append({
+                                            "地點": city_name,
+                                            "評級": rtg_val,
+                                            "綜合得分": sc_val,
+                                            "經度": loc['lon'],
+                                            "緯度": loc['lat']
+                                        })
+                                    except Exception as e:
+                                        continue # 跳過計算失敗的項目
                 
-                                reloc_data.append({
-                                    "城市": city_name,
-                                    "評級": rtg_val,
-                                    "得分": sc_val
-                                })
-        
-                        # 顯示表格 (這就是顯示不出來的關鍵)
-                        if reloc_data:
-                            df_reloc = pd.DataFrame(reloc_data)
-                            st.table(df_reloc)
-                        else:
-                            st.warning("無法計算重置數據。")
+                                # 將資料轉換為 DataFrame 顯示
+                                if reloc_data:
+                                    df_reloc = pd.DataFrame(reloc_data)
+                                    # 依據得分由高至低排序
+                                    df_reloc = df_reloc.sort_values(by="綜合得分", ascending=False)
+                    
+                                    st.success(f"計算完成！共分析 {len(df_reloc)} 個地區。")
+                                    st.dataframe(df_reloc, use_container_width=True)
+                                else:
+                                    st.error("未能產生任何計算結果。")
                     else:
-                        st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
+                        st.info("請於左側勾選「日返重置 (各國流年吉凶)」並點擊執行計算。")
                         
                 with tabs[5]:
                     if chk_db_ranking:
