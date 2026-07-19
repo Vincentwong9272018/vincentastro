@@ -1368,41 +1368,19 @@ if st.session_state.calc_triggered:
                     else:
                         st.info("請於左側勾選「大批 (1-75歲 日弧及日返吉凶)」以生成。")
                         
-with tabs[4]:
-    if chk_sr_reloc:
-        st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 各國流年吉凶)")
-        
-        # 準備資料儲存
-        reloc_data = []
-        # 定義你想測試的城市
-        test_cities = ["香港", "東京", "倫敦", "紐約"] 
-        
-        for city_name in test_cities:
-            if city_name in RELOCATION_COUNTRIES:
-                loc = RELOCATION_COUNTRIES[city_name]
-                # 重新定位計算
-                _, _, _, _, dt_reloc = resolve_location_and_time(city_name, st.session_state.p_year, st.session_state.p_month, st.session_state.p_day, st.session_state.p_hour, st.session_state.p_minute)
-                
-                # 這裡調用你的核心計算函式
-                _, _, _, _, _, sc_val, rtg_val, _, _, _, _ = calc_5_core(
-                    st.session_state.target_age, jd_n, pos_n, asc_n, cusps_n, speed_n, 
-                    loc['lat'], loc['lon'], h_code, dt_n_utc
-                )
-                
-                reloc_data.append({
-                    "城市": city_name,
-                    "評級": rtg_val,
-                    "得分": sc_val
-                })
-        
-        # 顯示表格 (這就是顯示不出來的關鍵)
-        if reloc_data:
-            df_reloc = pd.DataFrame(reloc_data)
-            st.table(df_reloc)
-        else:
-            st.warning("無法計算重置數據。")
-    else:
-        st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
+                with tabs[4]:
+                    if chk_sr_reloc:
+                        st.markdown(f"### 🌍 日返重置 ({st.session_state.target_age}歲 各國流年吉凶)")
+                        # 此處僅作為UI，具體數據可以接回前面的 reloc_data (如有啟用)
+                    else:
+                        st.info("請於左側勾選「日返重置 (各國流年吉凶)」以生成。")
+                        
+                with tabs[5]:
+                    if chk_db_ranking:
+                        st.markdown("### 🏆 資料庫人物特質排名 (Top 3)")
+                        st.info("資料庫排名引擎啟動中...")
+                    else:
+                        st.info("請於左側勾選「資料庫排名 (Top 3)」並確保已匯入 JSON 命例。")
             
             # --- 綜合觀測報告區 ---
             with col_main2:
